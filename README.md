@@ -4,7 +4,7 @@
 
 ### [Latest version](https://github.com/ooshhub/autoButtons/blob/main/autoButtons.js)
 ### [autoButtons thread on Roll20](https://app.roll20.net/forum/permalink/10766392/)
-###[Download file](https://minhaskamal.github.io/DownGit/#/home?url=https://github.com/ooshhub/autoButtons/blob/main/autoButtons.js)
+### [Download file](https://minhaskamal.github.io/DownGit/#/home?url=https://github.com/ooshhub/autoButtons/blob/main/autoButtons.js)
 
 ## CLI Commands
 **Keyword:** !autoButton
