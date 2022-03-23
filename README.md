@@ -1,12 +1,10 @@
-# autoButtons
-autoButtons API script for Roll20
+# autoButtons API script for Roll20
 
-### [Latest version](https://github.com/ooshhub/autoButtons/blob/main/autoButtons.js) - [Download](https://minhaskamal.github.io/DownGit/#/home?url=https://github.com/ooshhub/autoButtons/blob/main/autoButtons.js)
+*IMPORTANT: This script requires tokenMod to apply damage & healing to tokens. I could recreate the functions for all that but.... surely the Venn diagram of "people installing API scripts" and "people without tokenMod" is just two distant, lonely circles?*
 
-* *IMPORTANT: This script requires tokenMod to apply damage & healing to tokens. I could recreate the functions for all that but.... surely the Venn diagram of "people installing API scripts" and "people without tokenMod" is just two distant, lonely circles?* *
-
+### [Latest version](https://github.com/ooshhub/autoButtons/blob/main/autoButtons.js)
 ### [autoButtons thread on Roll20](https://app.roll20.net/forum/permalink/10766392/)
-
+###[Download file](https://minhaskamal.github.io/DownGit/#/home?url=https://github.com/ooshhub/autoButtons/blob/main/autoButtons.js)
 
 ## CLI Commands
 **Keyword:** !autoButton
