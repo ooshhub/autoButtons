@@ -100,10 +100,10 @@ const autoButtons = (() => { //eslint-disable-line no-unused-vars
 		// Check state of buttons, repair if needed
 		state[scriptName].customButtons = state[scriptName].customButtons || {};
 		for (let button in state[scriptName].customButtons) {
-			log(state[scriptName].customButtons[button]);
+			// log(state[scriptName].customButtons[button]);
 			buttons[button] = buttons[button] || state[scriptName].customButtons[button];
 			buttons[button].math = customButton.parseActionString(state[scriptName].customButtons[button].mathString||'');
-			log(buttons[button]);
+			// log(buttons[button]);
 		}
 		const allButtons = buttons.getNames(),
 			enabledButtons = config.getSetting('enabledButtons'),
