@@ -15,7 +15,7 @@ IMPORTANT: This script requires tokenMod to apply damage & healing to tokens. I 
 
 ```!autoButton --buttons```
 
-![buttonList](https://s3.amazonaws.com/files.d20.io/images/276861126/1vuR_1IHGwm0XUjbtx2UKg/med.png)
+![buttonList](https://i.ibb.co/k0ZvvPX/med.png)
 
 From left to right, the controls are "Show button", "Hide button", "Delete 
 button". Controls are greyed out when nonsensical - you can't "Show" a 
