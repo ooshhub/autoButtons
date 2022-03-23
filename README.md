@@ -7,15 +7,15 @@ IMPORTANT: This script requires tokenMod to apply damage & healing to tokens. I 
 
 
 # CLI Commands
-** Keyword: ** !autoButton
+**Keyword:** !autoButton
 
 
-** --listButtons / --buttons    
+**--listButtons / --buttons**  
     Generates a list of buttons currently available for use, e.g:
 
 ```!autoButton --buttons```
 
-![buttonList](https://s3.amazonaws.com/files.d20.io/images/276859251/9IWq8YEggyYvcZpbTyI6wA/original.gif?1647946775)
+![buttonList](https://s3.amazonaws.com/files.d20.io/images/276861126/1vuR_1IHGwm0XUjbtx2UKg/med.png)
 
 From left to right, the controls are "Show button", "Hide button", "Delete 
 button". Controls are greyed out when nonsensical - you can't "Show" a 
