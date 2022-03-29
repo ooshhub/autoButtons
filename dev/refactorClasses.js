@@ -1,94 +1,134 @@
-class ServiceLocator {
+const myScript = (() => {
 
-	static _active = null;
-	_services = {};
-
-	constructor(services={}) {
-		if (ServiceLocator._active) return ServiceLocator._active;
-		this.name = `ServiceLocator`;
-		for (let svc in services) { this._services[svc] = services[svc] }
-		ServiceLocator._active = this;
-	}
-
-	static getLocator() { return ServiceLocator._active }
-
-	register({ serviceName, serviceReference }) { if (!this._services[serviceName]) this._services[serviceName] = serviceReference }
-
-	getService(serviceName) {
-		console.log(this._services)
-		if (this._services[serviceName]) return { [serviceName]: this._services[serviceName] }
-		else {
-			const rxServices = new RegExp(`${serviceName}`, 'i')
-			for (let service in this._services) {
-				if (this._services[service].constructor && rxServices.test(this._services[service].constructor.name)) return { [service]: this._services[service] }
+	const eventTarget = {
+		handlers: {},
+		on: function(event, handler) {
+			this.handlers[event] = this.handlers[event] || [];
+			if (typeof(handler) === 'function') this.handlers[event].push(handler);
+			else console.warn(`Not a function cunt`)
+		},
+		trigger: function(event, ...args) {
+			if (this.handlers[event]) {
+				this.handlers[event].forEach(ev => ev(...args))
 			}
 		}
 	}
-}
 
-class CommandLineInterface {
+	const loadCore = () => {
 
-	_options = {};
+		const svc = new ServiceLocator();
 
-	constructor(cliData={}) {
-		this.name = cliData.name || `Cli`;
-		for (let option in cliData.options) {
-			cliData.options[option].name = cliData.options.name || option;
-			this.addOption(cliData.options[option]);
-		}
-	}
+		svc.register({ serviceName: 'bob', serviceReference: (inp) => {console.log(inp)}});
+		svc.register({ serviceName: 'config', serviceReference: new ConfigController() });
 
-	addOption(data) { if (data.name && !this._options[data.name]) this._options[data.name] = new CommandLineOption(data) }
-
-}
-
-class CommandLineOption {
-
-	_locator = null;
-
-	constructor(optionData={}) {
-		this._locator = ServiceLocator.getLocator();
-		optionData.services.forEach(svc => {
-			console.log(svc);
-			const service = this._locator.getService(svc);
-			console.log(service);
-			if (service) Object.assign(this, service);
-			else console.log(`Warning: CLI option is missing a service "${svc}"`);
-		});
-		Object.assign(this, {
-			name: optionData.name || 'newOption',
-			description: optionData.description || `Description goes here...`,
-			action: optionData.action
-		});
-	}
-}
-
-
-const svc = new ServiceLocator();
-
-svc.register({ serviceName: 'bob', serviceReference: (inp) => {console.log(inp)}});
-svc.register({ serviceName: 'config', serviceReference: {getSetting: (inp) => console.log(inp) } });
-
-const cli = new CommandLineInterface({services: ['bob'], options: {
-		hideButton: {
+		const cli = new CommandLineInterface({name: 'testCli'});
+		cli.addOption({
+			requiredServices: {
+				config: 'ConfigController',
+				other: 'bob',
+			},
+			name: `hideButton`,
 			rx: /^hidebut/i,
 			description: `Remove a button from the template`,
-			services: ['config', 'CommandLineInterface'],
-			action: function(args) {
-				const newVal = `${args}`.trim(),
-				oldVal = this.config.getSetting('enabledButtons') || [];
-				if (oldVal.length && oldVal.includes(newVal)) {
-					// const filtered = oldVal.filter(v=> v !== newVal);
-					// this.config.changeSetting('enabledButtons', filtered);
-					return `Button "${newVal}" is hidden.`;
-				} else console.log(`unrecognised button name`);
+			action: function(...args) {
+				console.log(...args)
+			}
+		});
+
+		svc.register({ serviceName: 'cli', serviceReference: cli });
+
+		// console.log(cli);
+		eventTarget.on('testEvent', cli.trigger);
+	
+		// console.log('brk')
+
+
+	}
+
+	class ServiceLocator {
+
+		static _active = null;
+		_services = {};
+
+		constructor(services={}) {
+			if (ServiceLocator._active) return ServiceLocator._active;
+			this.name = `ServiceLocator`;
+			for (let svc in services) { this._services[svc] = services[svc] }
+			ServiceLocator._active = this;
+		}
+
+		static getLocator() { return ServiceLocator._active }
+
+		register({ serviceName, serviceReference }) { if (!this._services[serviceName]) this._services[serviceName] = serviceReference }
+
+		getService(serviceName) {
+			// console.log(this._services)
+			if (this._services[serviceName]) return this._services[serviceName];
+			else {
+				const rxServices = new RegExp(`${serviceName}`, 'i')
+				for (let service in this._services) {
+					if (this._services[service].constructor && rxServices.test(this._services[service].constructor.name)) return this._services[service];
+				}
 			}
 		}
 	}
-});
 
-svc.register({ serviceName: 'cli', serviceReference: cli });
+	class CommandLineInterface {
 
-console.log(cli);
+		_locator = null;
+		_options = {};
 
-console.log('brk')
+		constructor(cliData={}) {
+			this.name = cliData.name || `Cli`;
+			this._locator = ServiceLocator.getLocator();
+			if (!this._locator) console.warn(`${this.constructor.name} could not find the service locator. Any commands relying on services will be disabled.`);
+			for (let option in cliData.options) {
+				cliData.options[option].name = cliData.options.name || option;
+				this.addOption(cliData.options[option]);
+			}
+			console.log(`Initialised CLI`)
+		}
+
+		addOption(data) {
+			if (data.name && !this._options[data.name]) {
+				const suppliedServices = {}
+				if (data.requiredServices) {
+					for (let service in data.requiredServices) {
+						const svc = this._locator.getService(data.requiredServices[service]);
+						if (svc) suppliedServices[service] = svc;
+						else console.warn(`${this.name}: Warning - Service "${service}" could not be found for option ${data.name}`);
+					}
+				}
+				data.services = suppliedServices;
+				this._options[data.name] = new CommandLineOption(data);
+				console.log(`Created a CLI option`);
+			} else console.warn(`Bad data supplied to CLI Option constructor`);
+		}
+
+		trigger(option) { console.log(`Triggered function ${option}`) }
+
+	}
+
+	class CommandLineOption {
+
+		constructor(optionData={}) {
+			for (let service in optionData.services) {
+				this[service] = optionData.services[service];
+			}
+			Object.assign(this, {
+				name: optionData.name || 'newOption',
+				rx: optionData.rx || new RegExp(`${optionData.name}`, 'i'),
+				description: optionData.description || `Description goes here...`,
+				action: optionData.action
+			});
+		}
+		
+	}
+
+	class ConfigController{ constructor() { Object.assign(this, { getSetting: () => console.log(`Function which does things`) }) } }
+
+	loadCore();
+
+	setTimeout(() => eventTarget.trigger('testEvent', 'hideButton'), 5000)
+
+})();
