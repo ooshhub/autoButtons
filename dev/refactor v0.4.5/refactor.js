@@ -98,7 +98,8 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
           state[scriptName].customButtons = {}; // new button store
         }
         if (v < `0.5.0`) { // major refactor
-          state[scriptName].store.customButtons = state[scriptName].customButtons || {};
+          state[scriptName].store.customButtons = state[scriptName].customButtons || {}; // copy old store to new stor
+          // whatever else needs to happen...
         }
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
       }
@@ -108,7 +109,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
         (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
         (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
           Config.loadPreset();
-          helpers.toChat(`Error fetching Config - loaded preset defaults`);
+          new ChatDialog({ title: `${scriptName} install`, content:`Error fetching Config - loaded preset defaults` }, 'error');
       }
       // Check state of buttons, repair if needed
       for (let button in state[scriptName].store.customButtons) {
@@ -119,7 +120,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
         enabledButtons = Config.getSetting('enabledButtons');
       const validButtons = enabledButtons.filter(v => allButtons.includes(v));
       if (validButtons.length !== enabledButtons.length) {
-        Config.changeSetting('enabledButtons', validButtons);
+        Config.changeSetting('enabledButtons', validButtons, { overwriteArray: true });
       }
       log(`=( Initialised ${scriptName} - v${Config.version} )=`);
       // console.log(state[scriptName]);
@@ -239,7 +240,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
 
   const rx = { on: /\b(1|true|on)\b/i, off: /\b(0|false|off)\b/i };
   
-  // Control debug levels at top of script
+  // Control debug levels with debugLevel variable at top of script. Move debug to CLI command?
   const console = (() => {
     const passthrough = (...args) => log(...args),
       nope = () => {};
