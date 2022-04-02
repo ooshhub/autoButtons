@@ -54,26 +54,60 @@ const createTrait = (characterId, traitName, traitDescription) => {
 }
 
 
-<table>
-<tr><th>{{rollname}}</th></tr>
-<tr><td><span class="tcat">Attack: </span>{{attack}} | {{attackadvantage}} vs AC</td></tr>
-  {{#damage}}
-  <tr>
-    <td><span class="tcat">Damage: </span>{{damage}} {{#rollWasCrit() attack}}<span class="tcat">Crit: </span>{{dmgcrit}} {{/rollWasCrit() attack}}</td>
-  </tr>
-  <tr>
-    <td><span class="tcat">Type: </span>{{dmgtype}}</td>
-  </tr>
-  {{/damage}}
-<tr>
-  <td><span class="tcat">Effect: </span>{{atteffect}}</td>
-</tr>
-</table>
-
 createRepeatingEntry('traits', [
   { name: 'name', current: 'Silly Walks' },
   { name: 'description', current: 'Unable to walk sensibly' },
 ]);
+
+const _defaultButtons = {
+  damageCrit: {
+    sheets: ['dnd5e_r20'],
+    tooltip: `Crit (%)`,
+    style: 'baahd',
+    default: true,
+    math: (damage, crit) => -(damage.total + crit.total),
+    content: 'kk',
+  },
+  damageFull: {
+    sheets: ['dnd5e_r20'],
+    tooltip: `Full (%)`,
+    style: 'baahd',
+    default: true,
+    math: (damage) => -(1 * damage.total),
+    content: 'k',
+  },
+  damageHalf: {
+    sheets: ['dnd5e_r20'],
+    tooltip: `Half (%)`,
+    style: 'baahd',
+    default: true,
+    math: (damage) => -(Math.floor(0.5 * damage.total)),
+    content: 'b',
+  },
+  healingFull: {
+    sheets: ['dnd5e_r20'],
+    tooltip: `Heal (%)`,
+    style: 'baahd',
+    default: true,
+    math: (damage) => (damage.total),
+    content: '&',
+  },
+  newButton: {
+    sheets: [],
+    tooltip: `Heal (%)`,
+    style: 'baahd',
+    default: false,
+    math: (damage) => (damage.total),
+    content: '&',
+  },
+};
+
+const str = 'blah'
+
+let arr = [];
+
+arr.push(...str)
+console.log(arr);
 
 console.log('brk');
 // [
