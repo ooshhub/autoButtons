@@ -1,7 +1,7 @@
 /* globals state log on sendChat playerIsGM */ //eslint-disable-line
 const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
 
-  const scriptName = `autoButtonsDev`,
+  const scriptName = `autoButtons`,
     scriptVersion = `0.5.1`,
     debugLevel = 1;
   let undoUninstall = null;
@@ -80,7 +80,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
           store: Config._store
         }
       } else if (state[scriptName].version < Config.version) {
-        let v = state[scriptName].version;
+        const v = state[scriptName].version;
         if (v < `0.1.3`) {
           Object.assign(state[scriptName]._settings, { ignoreAPI: 1 }); // new Config key
         }
@@ -94,7 +94,13 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
           state[scriptName].customButtons = {}; // new button store
         }
         if (v < `0.5.0`) { // major refactor
+          state[scriptName].store = state[scriptName].store || {};
+          log(`Converting old buttons to new store: ${Object.keys(state[scriptName].customButtons).join(', ')}`);
           state[scriptName].store.customButtons = helpers.copyObj(state[scriptName].customButtons) || {}; // copy old store to new stor
+          for (let button in state[scriptName].store.customButtons) {
+            state[scriptName].store.customButtons[button].name = state[scriptName].store.customButtons[button].name || button;
+            state[scriptName].store.customButtons[button].mathString = state[scriptName].store.customButtons[button].mathString || state[scriptName].store.customButtons[button].math;
+          }
           state[scriptName].settings.bump = state[scriptName].settings.bump || true;
 					state[scriptName].settings.targetTokens = state[scriptName].settings.targetTokens || false;
         }
@@ -111,7 +117,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
       // Check state of buttons, repair if needed
       // console.info(state[scriptName].store.customButtons);
       for (let button in state[scriptName].store.customButtons) {
-        state[scriptName].store.customButtons[button].math = false;
+        state[scriptName].store.customButtons[button].default = false;
         const { err } = ButtonStore.addButton(state[scriptName].store.customButtons[button]);
 				if (err) console.error(`${err}`);
       }

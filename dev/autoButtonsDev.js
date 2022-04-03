@@ -769,7 +769,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
     // Do validation beforehand
     _modifyArray(targetArray, newValue) { 
       if (!Array.isArray(targetArray || newValue == null)) return { err: `modifyArray error, bad parameters` };
-      return targetArray.includes(newValue) ? { result: 'removed', newArray: targetArray.filter(v=>v!==newValue) } : { result: 'added', newArray: targetArray.concat([newValue]) }
+      return targetArray.includes(newValue) ? { result: 'removed from', newArray: targetArray.filter(v=>v!==newValue) } : { result: 'added to', newArray: targetArray.concat([newValue]) }
     }
 
     get version() { return `${this._version.M}.${this._version.m}.${this._version.p}` }
@@ -836,7 +836,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
           if (result) {
             console.log(newArray)
             configPath[keyName] = newArray;
-            modded.push(`${newValue} was ***${result}*** to **${pathString}**`);
+            modded.push(`**${newValue}** was ${result} *${pathString}*`);
           }
         }
         else {
