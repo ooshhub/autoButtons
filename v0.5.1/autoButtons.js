@@ -2,8 +2,8 @@
 const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtonsDev`,
-    scriptVersion = `0.5.0`,
-    debugLevel = 4;
+    scriptVersion = `0.5.1`,
+    debugLevel = 1;
   let undoUninstall = null;
   
 /**
@@ -27,7 +27,8 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
         ignoreAPI: true,
         overheal: false,
         overkill: false,
-        // TODO: add new settings
+        targetTokens: false,
+				bump: true,
       },
     });
     Services.register({serviceName: 'config', serviceReference: Config });
@@ -94,9 +95,8 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
         }
         if (v < `0.5.0`) { // major refactor
           state[scriptName].store.customButtons = helpers.copyObj(state[scriptName].customButtons) || {}; // copy old store to new stor
-          // whatever else needs to happen...
-          // bump style
-          // targeting option
+          state[scriptName].settings.bump = state[scriptName].settings.bump || true;
+					state[scriptName].settings.targetTokens = state[scriptName].settings.targetTokens || false;
         }
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
       }
@@ -106,18 +106,20 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
         (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
         (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
           Config.loadPreset();
-          new ChatDialog({ title: `${scriptName} install`, content:`Error fetching Config - loaded preset defaults` }, 'error');
+          new ChatDialog({ title: `${scriptName} Install`, content:`Error fetching Config - loaded preset defaults` }, 'error');
       }
       // Check state of buttons, repair if needed
       // console.info(state[scriptName].store.customButtons);
       for (let button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].math = false;
-        console.log(ButtonStore.addButton(state[scriptName].store.customButtons[button]));
+        const { err } = ButtonStore.addButton(state[scriptName].store.customButtons[button]);
+				if (err) console.error(`${err}`);
       }
       const allButtons = ButtonStore.getButtonNames(),
         enabledButtons = Config.getSetting('enabledButtons');
       const validButtons = enabledButtons.filter(v => allButtons.includes(v));
       if (validButtons.length !== enabledButtons.length) {
+				console.warn(`Invalid button found in enabledButtons - button hidden.`);
         Config.changeSetting('enabledButtons', validButtons, { overwriteArray: true });
       }
       log(`=( Initialised ${scriptName} - v${Config.version} )=`);
@@ -238,6 +240,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
       },
       footer: `text-align: center; font-weight: bold; padding: 6px 0px 6px 0px; border-top: solid 1px darkgray; line-height: 1.5em;`,
     },
+/////// New in v0.5.1
     mods: {
       bump: `left: -5px; top: -30px; margin-bottom: -34px;`
     }
@@ -834,7 +837,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
         else if (Array.isArray(configPath[keyName]) && !options.overwriteArray) {
           const { newArray, result } = this._modifyArray(configPath[keyName], newValue);
           if (result) {
-            console.log(newArray)
+            console.log(newArray);
             configPath[keyName] = newArray;
             modded.push(`${newValue} was ***${result}*** to **${pathString}**`);
           }
@@ -852,10 +855,8 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
       }
     }
     getSetting(pathString, baseObject = this._settings) {
-      // log(`getsetting ${pathString}`);
       if (typeof(pathString) !== 'string') return null;
       let configValue = this._getObjectPath(pathString, baseObject, false);
-      // log(configValue);
       return (typeof configValue === 'object') ? helpers.copyObj(configValue) : configValue;
     }
     loadPreset() {
@@ -888,18 +889,15 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
     get keys() { return ButtonController._buttonKeys }
 
     getButtonNames(filters={ default: null, currentSheet: null, shown: null, hidden: null }) {
-      // console.log(Object.keys(this._buttons));
       let buttons = Object.entries(this._buttons);
       const sheet = this._Config.getSetting('sheet'),
         enabledButtons = this._Config.getSetting('enabledButtons');
-      // console.log(sheet);
-      // console.log(enabledButtons);
       if (typeof filters.default === 'boolean') buttons = buttons.filter(kv => kv[1].default === filters.default);
       if (typeof filters.currentSheet === 'boolean') buttons = buttons.filter(kv => (!kv[1].sheets.length || sheet === 'custom' || (kv[1].sheets.includes(sheet) === filters.currentSheet)));
       if (typeof filters.shown === 'boolean') buttons = buttons.filter(kv => (enabledButtons.includes(kv[0]) === filters.shown));
       if (typeof filters.hidden === 'boolean') buttons = buttons.filter(kv => (enabledButtons.includes(kv[0]) === !filters.hidden));
       const output =  buttons.map(kv=>kv[0]);
-      // log(`button names: ${output.join(', ')}`);
+      console.log(`button names: ${output.join(', ')}`);
       return output;
     }
 
@@ -944,7 +942,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
       if (newButton.err) return { success: 0, err: newButton.err }
       if (this._buttons[newButton.name]) return { success: 0, err: `Button "${newButton.name}" already exists` };
       this._buttons[newButton.name] = newButton;
-      // console.info(this._buttons);
+      console.info(this._buttons);
       this.saveToStore();
       return { success: 1, msg: `New Button "${newButton.name}" successfully created` }
     }
@@ -987,9 +985,8 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
     }
     saveToStore() {
       const customButtons = this.getButtonNames({default: false});
-      // console.log(customButtons);
       customButtons.forEach(button => this._Config.toStore(`customButtons/${button}`, helpers.copyObj(this._buttons[button])));
-      // console.log(this._Config.fromStore('customButtons'));
+      console.log(this._Config.fromStore('customButtons'));
     }
     createApiButton(buttonName, damage, crit) {
       const btn = this._buttons[buttonName],
@@ -997,8 +994,8 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
         overheal = this._Config.getSetting('overheal'),
         overkill = this._Config.getSetting('overkill');
       if (!btn || typeof(btn.math) !== 'function') {
-        log(`${scriptName}: error creating API button ${buttonName}`);
-        log(`No button found or invalid math function: ${btn.math}`);
+        console.error(`${scriptName}: error creating API button ${buttonName}`);
+        console.error(`No button found or invalid math function: "${btn.math}"`);
         return ``;
       }
       const modifier = btn.math(damage, crit),
@@ -1097,7 +1094,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
         for (let option in this._options) {
           if (this._options[option].rx.test(cmd)) {
             const { success, msg, err } = (this._options[option].action(args) || {});
-            console.log(msg||err);
+            // console.log(msg||err);
             if (success && msg) changed.push(helpers.toArray(msg).join('<br>'));
             if (err) errs.push(err);
           }
