@@ -46,7 +46,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
     });
     Services.register({ serviceName: 'cli', serviceReference: CLI });
 
-//////// v0.5.x additions
+//////// v0.5.1 additions
     CLI.addOptions([
       {
         name: 'bump',
