@@ -71,7 +71,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
     // Check install and version
     const checkInstall = () => {
-      if (typeof(state[scriptName].version) === 'number' && state[scriptName].version % 1 !== 0) { state[scriptName].version = `${state[scriptName].version}`.replace(/\D/g, '').split('', 3).join('.') }
       setTimeout(() => { if (!/object/i.test(typeof(['token-mod']))) return sendChat(scriptName, `/w gm <div style="${styles.error}">tokenMod not found - this script requires tokenMod to function! Aborting init...</div>`), 500 });
       if (!state[scriptName] || !state[scriptName].version) {
         log(`autoButtons: first time setup...`);
@@ -80,7 +79,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           settings: Config._settings,
           store: Config._store
         }
-      } else if (state[scriptName].version < Config.version) {
+      }
+      if (typeof(state[scriptName].version) === 'number' && state[scriptName].version % 1 !== 0) { state[scriptName].version = `${state[scriptName].version}`.replace(/\D/g, '').split('', 3).join('.') }
+      if (state[scriptName].version < Config.version) {
         const v = state[scriptName].version;
         if (v < `0.1.3`) {
           Object.assign(state[scriptName]._settings, { ignoreAPI: 1 }); // new Config key
