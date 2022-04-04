@@ -1,5 +1,5 @@
 /* globals state log on sendChat playerIsGM */ //eslint-disable-line
-const autoButtons = (() => { // eslint-disable-line no-unused-vars
+const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
     scriptVersion = `0.5.2`,

@@ -2,7 +2,7 @@
 const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.5.1`,
+    scriptVersion = `0.5.2`,
     debugLevel = 1;
   let undoUninstall = null;
   
@@ -23,7 +23,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
         templates: {},
         enabledButtons: [],
         gmOnly: true,
-        hpBar: true,
+        hpBar: 1,
         ignoreAPI: true,
         overheal: false,
         overkill: false,
@@ -46,7 +46,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
     });
     Services.register({ serviceName: 'cli', serviceReference: CLI });
 
-//////// v0.5.x additions
+  //////// v0.5.x additions
     CLI.addOptions([
       {
         name: 'bump',
@@ -67,7 +67,7 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
          }
       }
     ]);
-/////////
+  /////////
 
     // Check install and version
     const checkInstall = () => {
@@ -94,20 +94,15 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
           state[scriptName].customButtons = {}; // new button store
         }
         if (v < `0.5.0`) { // major refactor
-          state[scriptName].store = state[scriptName].store || {};
-          log(`Converting old buttons to new store: ${Object.keys(state[scriptName].customButtons).join(', ')}`);
-          state[scriptName].store.customButtons = helpers.copyObj(state[scriptName].customButtons) || {}; // copy old store to new stor
-          for (let button in state[scriptName].store.customButtons) {
-            state[scriptName].store.customButtons[button].name = state[scriptName].store.customButtons[button].name || button;
-            state[scriptName].store.customButtons[button].mathString = state[scriptName].store.customButtons[button].mathString || state[scriptName].store.customButtons[button].math;
-          }
+          helpers.copyOldButtonStore();
           state[scriptName].settings.bump = state[scriptName].settings.bump || true;
 					state[scriptName].settings.targetTokens = state[scriptName].settings.targetTokens || false;
         }
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
       }
       state[scriptName].version = Config.version;
-      Config.fetchFromState();			
+      if (!state[scriptName].store || !state[scriptName].store.customButtons) helpers.copyOldButtonStore();
+      Config.fetchFromState();
       if (
         (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
         (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
@@ -360,7 +355,17 @@ const autoButtonsDev = (() => { // eslint-disable-line no-unused-vars
     }
     const copyObj = (inputObj) => (typeof inputObj !== 'object') ? null : JSON.parse(JSON.stringify(inputObj));
 
-    return { processFields, findName, toChat, toArray, emproper, splitHandlebars, camelise, copyObj }
+    const copyOldButtonStore = () => {
+      state[scriptName].store = state[scriptName].store || {};
+      log(`Converting old buttons to new store: ${Object.keys(state[scriptName].customButtons).join(', ')}`);
+      state[scriptName].store.customButtons = helpers.copyObj(state[scriptName].customButtons) || {}; // copy old store to new stor
+      for (let button in state[scriptName].store.customButtons) {
+        state[scriptName].store.customButtons[button].name = state[scriptName].store.customButtons[button].name || button;
+        state[scriptName].store.customButtons[button].mathString = state[scriptName].store.customButtons[button].mathString || state[scriptName].store.customButtons[button].math;
+      }
+    }
+
+    return { processFields, findName, toChat, toArray, emproper, splitHandlebars, camelise, copyObj, copyOldButtonStore }
   })();
 
   // 5e specific helpers
