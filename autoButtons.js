@@ -71,6 +71,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
     // Check install and version
     const checkInstall = () => {
+      if (typeof(state[scriptName].version) === 'number' && state[scriptName].version % 1 !== 0) { state[scriptName].version = `${state[scriptName].version}`.replace(/\D/g, '').split('', 3).join('.') }
       setTimeout(() => { if (!/object/i.test(typeof(['token-mod']))) return sendChat(scriptName, `/w gm <div style="${styles.error}">tokenMod not found - this script requires tokenMod to function! Aborting init...</div>`), 500 });
       if (!state[scriptName] || !state[scriptName].version) {
         log(`autoButtons: first time setup...`);
@@ -101,7 +102,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
       }
       state[scriptName].version = Config.version;
-      if (!state[scriptName].store || !state[scriptName].store.customButtons) helpers.copyOldButtonStore();
       Config.fetchFromState();
       if (
         (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
@@ -110,7 +110,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           new ChatDialog({ title: `${scriptName} Install`, content:`Error fetching Config - loaded preset defaults` }, 'error');
       }
       // Check state of buttons, repair if needed
-      // console.info(state[scriptName].store.customButtons);
+      if (!state[scriptName].store) helpers.copyOldButtonStore();
       for (let button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].default = false;
         const { err } = ButtonStore.addButton(state[scriptName].store.customButtons[button]);
@@ -356,13 +356,15 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     const copyObj = (inputObj) => (typeof inputObj !== 'object') ? null : JSON.parse(JSON.stringify(inputObj));
 
     const copyOldButtonStore = () => {
+      let names = [];
       state[scriptName].store = state[scriptName].store || {};
-      log(`Converting old buttons to new store: ${Object.keys(state[scriptName].customButtons).join(', ')}`);
       state[scriptName].store.customButtons = helpers.copyObj(state[scriptName].customButtons) || {}; // copy old store to new stor
       for (let button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].name = state[scriptName].store.customButtons[button].name || button;
         state[scriptName].store.customButtons[button].mathString = state[scriptName].store.customButtons[button].mathString || state[scriptName].store.customButtons[button].math;
+        names.push(state[scriptName].store.customButtons[button].name);
       }
+      new ChatDialog({ title: 'Buttons copied to new version', content: names });
     }
 
     return { processFields, findName, toChat, toArray, emproper, splitHandlebars, camelise, copyObj, copyOldButtonStore }
