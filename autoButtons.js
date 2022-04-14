@@ -2,7 +2,7 @@
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.5.2`,
+    scriptVersion = `0.5.3`,
     debugLevel = 1;
   let undoUninstall = null;
   
@@ -71,9 +71,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
     // Check install and version
     const checkInstall = () => {
+      let firstTimeSetup;
       setTimeout(() => { if (!/object/i.test(typeof(['token-mod']))) return sendChat(scriptName, `/w gm <div style="${styles.error}">tokenMod not found - this script requires tokenMod to function! Aborting init...</div>`), 500 });
-      if (!state[scriptName] || !state[scriptName].version) {
+      if (!state[scriptName] || !state[scriptName].version ) {
         log(`autoButtons: first time setup...`);
+        firstTimeSetup = 1;
         state[scriptName] = {
           version: Config.version,
           settings: Config._settings,
@@ -83,18 +85,18 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (typeof(state[scriptName].version) === 'number' && state[scriptName].version % 1 !== 0) { state[scriptName].version = `${state[scriptName].version}`.replace(/\D/g, '').split('', 3).join('.') }
       if (state[scriptName].version < Config.version) {
         const v = state[scriptName].version;
-        if (v < `0.1.3`) {
-          Object.assign(state[scriptName]._settings, { ignoreAPI: 1 }); // new Config key
+        if (v < `0.1.3`) { /* 0.5.3 fix - bad key names for very old versions */
+          Object.assign(state[scriptName].settings, { ignoreAPI: 1 }); // new Config key
         }
         if (v < `0.2.0`) {
-          Object.assign(state[scriptName]._settings, { overkill: 0, overheal: 0, enabledButtons: [] }); // new Config keys
+          Object.assign(state[scriptName].settings, { overkill: 0, overheal: 0, enabledButtons: [] }); // new Config keys
         }
         if (v < `0.3.0`) {
           Config.loadPreset(); // structure of preset has changed - reload
         }
-        if (v < `0.4.0`) {
-          state[scriptName].customButtons = {}; // new button store
-        }
+        // if (v < `0.4.0`) { *** store is already outdated ***
+        //   // state[scriptName].customButtons = {}; 
+        // }
         if (v < `0.5.0`) { // major refactor
           helpers.copyOldButtonStore();
           state[scriptName].settings.bump = state[scriptName].settings.bump || true;
@@ -108,11 +110,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
         (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
           Config.loadPreset();
-          new ChatDialog({ title: `${scriptName} Install`, content:`Error fetching Config - loaded preset defaults` }, 'error');
+          if (!firstTimeSetup) new ChatDialog({ title: `${scriptName} Install`, content:`Error fetching Config - loaded preset defaults` }, 'error');
       }
       // Check state of buttons, repair if needed
       if (!state[scriptName].store) helpers.copyOldButtonStore();
-      for (let button in state[scriptName].store.customButtons) {
+      for (const button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].default = false;
         const { err } = ButtonStore.addButton(state[scriptName].store.customButtons[button]);
 				if (err) console.error(`${err}`);
@@ -359,13 +361,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     const copyOldButtonStore = () => {
       let names = [];
       state[scriptName].store = state[scriptName].store || {};
-      state[scriptName].store.customButtons = helpers.copyObj(state[scriptName].customButtons) || {}; // copy old store to new stor
-      for (let button in state[scriptName].store.customButtons) {
+      state[scriptName].store.customButtons = helpers.copyObj(state[scriptName].customButtons) || {}; // copy old store to new store
+      for (const button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].name = state[scriptName].store.customButtons[button].name || button;
         state[scriptName].store.customButtons[button].mathString = state[scriptName].store.customButtons[button].mathString || state[scriptName].store.customButtons[button].math;
         names.push(state[scriptName].store.customButtons[button].name);
       }
-      new ChatDialog({ title: 'Buttons copied to new version', content: names });
+      if (names.length) new ChatDialog({ title: 'Buttons copied to new version', content: names });
     }
 
     return { processFields, findName, toChat, toArray, emproper, splitHandlebars, camelise, copyObj, copyOldButtonStore }
@@ -1195,6 +1197,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
   }
 
-  startScript();
+  on('ready', startScript);
 
 })();
