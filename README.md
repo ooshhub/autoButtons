@@ -22,4 +22,4 @@ button". Controls are greyed out when nonsensical - you can't "Show" a
 button which is already shown on the button template, and you cannot 
 "Hide" a button which isn't currently enabled.
 
-## ... WORK IN PROGRESS
+## ... WORK IN PROGRESS - please follow Roll20 link above for full instructions
