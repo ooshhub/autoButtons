@@ -11,7 +11,7 @@ For documentation and support please visit Roll20:
 ### Features
 #### Account for temp_hp
 - option 1: custom code, with a setting for the name of the temp_hp field
-- option 2: Keith's solution, make register tempHP with tokenMod
+- option 2: Keith's solution, register Aaron's tempHP script with tokenMod
 
 #### Add HP change reporting
 - toggle between GM, public, and character
