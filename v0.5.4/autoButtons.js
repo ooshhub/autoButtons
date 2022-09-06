@@ -2,7 +2,7 @@
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.5.2`,
+    scriptVersion = `0.5.4`,
     debugLevel = 1;
   let undoUninstall = null;
   
@@ -85,7 +85,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (typeof(state[scriptName].version) === 'number' && state[scriptName].version % 1 !== 0) { state[scriptName].version = `${state[scriptName].version}`.replace(/\D/g, '').split('', 3).join('.') }
       if (state[scriptName].version < Config.version) {
         const v = state[scriptName].version;
-        if (v < `0.1.3`) {
+        if (v < `0.1.3`) { /* 0.5.3 fix - bad key names for very old versions */
           Object.assign(state[scriptName].settings, { ignoreAPI: 1 }); // new Config key
         }
         if (v < `0.2.0`) {
