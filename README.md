@@ -6,7 +6,7 @@ For documentation and support please visit Roll20:
 ### [autoButtons thread on Roll20](https://app.roll20.net/forum/permalink/10766392/)
 
 
-##v0.6.0 TODO:
+## v0.6.0 TODO:
 
 ### Features
 #### Account for temp_hp
