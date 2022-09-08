@@ -2,8 +2,8 @@
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.5.3`,
-    debugLevel = 1;
+    scriptVersion = `0.6.0`;
+    // debugLevel = 4;
   let undoUninstall = null;
   
 /**
@@ -19,16 +19,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         customButtons: {}
       },
       settings: {
-        sheet: 'dnd5e_r20',
-        templates: {},
-        enabledButtons: [],
-        gmOnly: true,
-        hpBar: 1,
-        ignoreAPI: true,
-        overheal: false,
-        overkill: false,
-        targetTokens: false,
-				bump: true,
+        // 0.6.x Setting additions
+
+        //
+        ...defaultScriptSettings,
       },
     });
     Services.register({serviceName: 'config', serviceReference: Config });
@@ -46,28 +40,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     });
     Services.register({ serviceName: 'cli', serviceReference: CLI });
 
-  //////// v0.5.x additions
-    CLI.addOptions([
-      {
-        name: 'bump',
-        rx: /^bump/i,
-        description: `Bump the button UI up to the top of the chat message`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('bump', args, { createPath: true, force: 'boolean' }) }
-      },
-      {
-        name: 'targetTokens',
-        rx: /^targett/i,
-        description: `Use @{target} instead of @{select} for applying damage to tokens`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) {
-          const result = this.config.changeSetting('targetTokens', args, { createPath: true, force: 'boolean' });
-          if (this.config.getSetting('targetTokens') && result.success && result.msg) result.msg.push(`*Important*: Players cannot use targeting unless TokenMod is set to allow players to use token ids.`);
-          return result;
-         }
-      }
-    ]);
-  /////////
+    // v0.6.x CLI additions
+    // CLI.addOptions([
+
+    // ]);
+    //
 
     // Check install and version
     const checkInstall = () => {
@@ -76,11 +53,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (!state[scriptName] || !state[scriptName].version ) {
         log(`autoButtons: first time setup...`);
         firstTimeSetup = 1;
-        state[scriptName] = {
-          version: Config.version,
-          settings: Config._settings,
-          store: Config._store
-        }
+        state[scriptName] = Config.initialState();
       }
       if (typeof(state[scriptName].version) === 'number' && state[scriptName].version % 1 !== 0) { state[scriptName].version = `${state[scriptName].version}`.replace(/\D/g, '').split('', 3).join('.') }
       if (state[scriptName].version < Config.version) {
@@ -94,31 +67,36 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (v < `0.3.0`) {
           Config.loadPreset(); // structure of preset has changed - reload
         }
-        // if (v < `0.4.0`) { *** store is already outdated ***
-        //   // state[scriptName].customButtons = {}; 
-        // }
-        if (v < `0.5.0`) { // major refactor
-          helpers.copyOldButtonStore();
+        if (v < `0.5.0`) { // major refactor - move buttons over to new button store
+          Helpers.copyOldButtonStore();
           state[scriptName].settings.bump = state[scriptName].settings.bump || true;
 					state[scriptName].settings.targetTokens = state[scriptName].settings.targetTokens || false;
         }
+        if (v < `0.6.0`) {
+          // Remove the old buttons store
+          if (state[scriptName].settings.buttons && state[scriptName].store) delete state[scriptName].settings.buttons;
+        }
+        state[scriptName].version = Config.version;
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
       }
-      state[scriptName].version = Config.version;
+      // console.log(`Finished version checking...`);
       Config.fetchFromState();
+      // console.log('fetched...');
       if (
         (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
         (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
+          console.log(`Loading preset...`);
           Config.loadPreset();
           if (!firstTimeSetup) new ChatDialog({ title: `${scriptName} Install`, content:`Error fetching Config - loaded preset defaults` }, 'error');
       }
       // Check state of buttons, repair if needed
-      if (!state[scriptName].store) helpers.copyOldButtonStore();
+      if (!state[scriptName].store) Helpers.copyOldButtonStore();
       for (const button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].default = false;
         const { err } = ButtonStore.addButton(state[scriptName].store.customButtons[button]);
 				if (err) console.error(`${err}`);
       }
+      // console.log(`Checking for valid buttons...`);
       const allButtons = ButtonStore.getButtonNames(),
         enabledButtons = Config.getSetting('enabledButtons');
       const validButtons = enabledButtons.filter(v => allButtons.includes(v));
@@ -127,7 +105,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         Config.changeSetting('enabledButtons', validButtons, { overwriteArray: true });
       }
       log(`=( Initialised ${scriptName} - v${Config.version} )=`);
-      // console.log(state[scriptName]);
     }
     
     // Send buttons to chat
@@ -135,26 +112,26 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const gmOnly = Config.getSetting('gmOnly') ? true : false;
       let buttonHtml = '',
         activeButtons = Config.getSetting(`enabledButtons`) || [],
-        name = helpers.findName(msg.content);
+        name = Helpers.findName(msg.content);
       name = name || `Apply:`;
       activeButtons.forEach(btn => buttonHtml += ButtonStore.createApiButton(btn, damage, crit));
       const buttonTemplate = `<div class="autobutton" style="${styles.outer}${Config.getSetting('bump') ? styles.mods.bump : ''}}"><div style="${styles.rollName}">${name}</div>${buttonHtml}</div>`;
-      helpers.toChat(`${buttonTemplate}`, gmOnly);
+      Helpers.toChat(`${buttonTemplate}`, gmOnly);
     }
 
     // Deconstruct roll
     const handleDamageRoll = (msg) => {
       const dmgFields = Config.getSetting('templates/damageProperties/damage')||[],
         critFields = Config.getSetting('templates/damageProperties/crit')||[];
-      const damage = helpers.processFields(dmgFields, msg),
-        crit = helpers.processFields(critFields, msg);
+      const damage = Helpers.processFields(dmgFields, msg),
+        crit = Helpers.processFields(critFields, msg);
       if ('dnd5e_r20' === Config.getSetting('sheet')) {
-        const isSpell = helpers5e.is5eAttackSpell(msg.content);
+        const isSpell = Helpers5e.is5eAttackSpell(msg.content);
         if (isSpell) {
           const upcastDamageFields = Config.getSetting('templates/damageProperties/upcastDamage')||[],
             upcastCritFields = Config.getSetting('templates/damageProperties/upcastCrit')||[];
-          damage.total += helpers.processFields(upcastDamageFields, msg).total||0;
-          crit.total += helpers.processFields(upcastCritFields, msg).total||0;
+          damage.total += Helpers.processFields(upcastDamageFields, msg).total||0;
+          crit.total += Helpers.processFields(upcastCritFields, msg).total||0;
         }
       }
       sendButtons(damage, crit, msg);
@@ -164,9 +141,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     const handleInput = (msg) => {
       const msgIsGM = playerIsGM(msg.playerid);
       if (msg.type === 'api' && msgIsGM && /^!(autobut)/i.test(msg.content)) {
-        let cmdLine = (msg.content.match(/^![^\s]+\s+(.+)/i) || [])[1],
-            commands = cmdLine ? cmdLine.split(/\s*--\s*/g) : [];
+        const cmdLine = (msg.content.match(/^![^\s]+\s+(.+)/i) || [])[1],
+          commands = cmdLine ? cmdLine.split(/\s*--\s*/g) : [];
         commands.shift();
+        // console.log(commands);
         if (commands.length) CLI.assess(commands);
       }
       else if (msg.rolltemplate && Config.getSetting('templates/names').includes(msg.rolltemplate)) {
@@ -192,12 +170,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       sheet: ['dnd5e_r20'],
       templates: {
         names: ['atkdmg', 'dmg', 'npcfullatk', 'npcdmg'],
-        damageProperties: {
-          damage: ['dmg1', 'dmg2', 'globaldamage'],
-          crit: ['crit1', 'crit2', 'globaldamagecrit'],
-          upcastDamage: ['hldmg'],
-          upcastCrit: ['hldmgcrit'],
-        }
+        damageFields: ['dmg1', 'dmg2', 'globaldamage'],
+        critFields: ['crit1', 'crit2', 'globaldamagecrit'],
+        upcastDamage: ['hldmg'],
+        upcastCrit: ['hldmgcrit'],
       },
       defaultButtons: ['damageCrit', 'damageFull', 'damageHalf', 'healingFull'],
       // userButtons array, to save user button setup?
@@ -206,10 +182,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       sheet: [],
       templates: {
         names: [],
-        damageProperties: {
-          damage: [],
-          crit: [],
-        }
+        damageFields: [],
+        critFields: [],
       },
       defaultButtons: []
     }
@@ -229,7 +203,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     list: {
       container: `font-size: 1.5rem; background: #41415c; border: 5px solid #1c7b74; border-radius: 3px; color: white; vertical-align: middle;`,
       header: `text-align: center; font-weight: bold; padding: 6px 0px 6px 0px; border-bottom: solid 1px darkgray; line-height: 1.5em;`,
-      body: `padding: 8px 0px 8px 0px;`,
+      body: `padding: 8px 1rem 8px 1rem;`,
       row: `vertical-align: middle; margin: 0.2em auto 0.2em auto; font-size: 1.2em; line-height: 1.4em;`,
       name: `display: inline-block; vertical-align: middle;	width: 60%; margin-left: 5%; overflow-x: hidden;`,
       buttonContainer: `	display: inline-block; vertical-align: middle; width: 10%; text-align: center; line-height: 1.2em;`,
@@ -244,7 +218,18 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       },
       footer: `text-align: center; font-weight: bold; padding: 6px 0px 6px 0px; border-top: solid 1px darkgray; line-height: 1.5em;`,
     },
-/////// New in v0.5.1
+    table: {
+      outer: `overflow-x: auto;`,
+      table: `margin: 1rem auto; width: 95%; justify-content: center; border: 1px solid #7fb07f;`,
+      headerRow: ``,
+      row: `background-color: #5e5e63; margin: 0.5rem;`,
+      headerCell: `	text-align: center; font-size: 1.7rem; padding: 1rem; border-bottom: 1px solid #7fb07f;`,
+      cell: `padding: 0.5rem 1rem;`,
+      footer: ``,
+      settingName: `border: 1px solid whitesmoke; padding: 0.4rem 0; border-radius: 0.5rem; cursor: help;`,
+      button: `	display: inline-block; background-color: darkgray; border: 1px solid #cae1df; box-shadow: 0px 0px 3px #bcdbd8; border-radius: 3px; color: #045754; padding: 0.3rem 0.5rem; margin: 0.2rem 0!important; font-size: 1.1em; line-height: 1.2em;`,
+    },
+    // BUMP setting CSS - if Roll20 dick with the chatbar CSS this will need to be updated
     mods: {
       bump: `left: -5px; top: -30px; margin-bottom: -34px;`
     }
@@ -284,23 +269,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   // Global regex
   const rx = { on: /\b(1|true|on)\b/i, off: /\b(0|false|off)\b/i };
-  
-  // Control debug levels with debugLevel variable at top of script. Move debug to CLI command?
-  const console = (() => {
-    const passthrough = (...args) => log(...args),
-      nope = () => {};
-    return {
-      log: debugLevel > 3 ? passthrough : nope,
-      info: debugLevel > 2 ? passthrough : nope,
-      warn: debugLevel > 1 ? passthrough : nope, 
-      error: debugLevel > 0 ? passthrough : nope,
-    }
-  })();
 
   // Helper functions
-  const helpers = (() => { 
+  class Helpers { 
     // Process roll object according to rolltemplate fields
-    const processFields = (fieldArray, msg) => {
+    static processFields(fieldArray, msg) {
       let output = {}
       const rolls = msg.inlinerolls;
       output.total = fieldArray.reduce((m, v) => {
@@ -319,23 +292,23 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       return output;
     }
     // Simple name finder, provided rolltemplate has some kind of 'name' property
-    const findName = (msgContent) => {
+    static findName(msgContent) {
       const rxName = /name=([^}]+)}/i;
       let name = msgContent.match(rxName);
       return name ? name[1] : null;
     }
     // sendChat shortcut
-    const toChat = (msg, whisper = true) => {
+    static toChat(msg, whisper = true) {
       let prefix = whisper ? `/w gm ` : '';
       sendChat(scriptName, `${prefix}${msg}`, {noarchive: true});
     }
-    const toArray = (inp) => Array.isArray(inp) ? inp : [inp];
-    const emproper = (inpString) => {
+    static toArray(inp) { return Array.isArray(inp) ? inp : [inp]; }
+    static emproper(inpString) {
       let words = inpString.split(/\s+/g);
       return words.map(w => `${w[0].toUpperCase()}${w.slice(1)}`).join(` `);
     }
     // Split {{handlebars=moustache}} notation to key value
-    const splitHandlebars = (inputString) => {
+    static splitHandlebars(inputString) {
       let output = {},
         kvArray = inputString.match(/{{[^}]+}}/g)||[];
       kvArray.forEach(kv => {
@@ -347,7 +320,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       return Object.keys(output).length ? output : null;
     }
     // Camelise a name if user tries to use whitespace
-    const camelise = (inp, options={enforceCase:false}) => {
+    static camelise(inp, options={enforceCase:false}) {
       if (typeof(inp) !== 'string') return null;
       const words = inp.split(/[\s_]+/g);
       return words.map((w,i) => {
@@ -356,12 +329,41 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         return `${wPre}${wSuf}`;
       }).join('');
     }
-    const copyObj = (inputObj) => (typeof inputObj !== 'object') ? null : JSON.parse(JSON.stringify(inputObj));
 
-    const copyOldButtonStore = () => {
+    static isObj(input) { return (typeof(input) === 'object' && input.constructor.name === 'Object') ? true : false }
+
+    static copyObj(inputObj) { return (typeof inputObj !== 'object') ? null : JSON.parse(JSON.stringify(inputObj)); }
+
+    static getObjectPath(pathString, baseObject, createPath, deleteTarget) {
+      const parts = pathString.split(/\/+/g);
+      const objRef = parts.reduce((m,v,i) => {
+        if (m == null) return;
+        if (m[v] == null) {
+          if (createPath) m[v] = {};
+          else return null;
+        }
+        if (deleteTarget && (i === parts.length-1)) delete m[v];
+        else return m[v];}, baseObject)
+      return objRef;
+    }
+
+    // If value exists in array, it will be removed, otherwise it will be added. No validation done. Does not mutate the original.
+    static modifyArray(targetArray, newValue) { 
+      if (!Array.isArray(targetArray || newValue == null)) return { err: `modifyArray error, bad parameters` };
+      if (targetArray.includes(newValue)) {
+        targetArray = targetArray.filter(v=>v!==newValue);
+        return { msg: `Removed ${newValue} from array.` }
+      }
+      else {
+        targetArray = targetArray.push(newValue);
+        return { msg: `Added ${newValue} to array.` }
+      }
+    }
+
+    static copyOldButtonStore() {
       let names = [];
       state[scriptName].store = state[scriptName].store || {};
-      state[scriptName].store.customButtons = helpers.copyObj(state[scriptName].customButtons) || {}; // copy old store to new store
+      state[scriptName].store.customButtons = Helpers.copyObj(state[scriptName].customButtons) || {}; // copy old store to new store
       for (const button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].name = state[scriptName].store.customButtons[button].name || button;
         state[scriptName].store.customButtons[button].mathString = state[scriptName].store.customButtons[button].mathString || state[scriptName].store.customButtons[button].math;
@@ -369,22 +371,37 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
       if (names.length) new ChatDialog({ title: 'Buttons copied to new version', content: names });
     }
-
-    return { processFields, findName, toChat, toArray, emproper, splitHandlebars, camelise, copyObj, copyOldButtonStore }
-  })();
+  }
 
   // 5e specific helpers
-  const helpers5e = (() => {
+  class Helpers5e {
     // Spell detection
-    const is5eAttackSpell = (msgContent) => {
+    static is5eAttackSpell(msgContent) {
       const rxSpell = /{spelllevel=(cantrip|\d+)/;
       return rxSpell.test(msgContent) ? 1 : 0;
     }
-    return { is5eAttackSpell }
-  })();
+  }
 
   // Default command line options
   const defaultCliOptions = [
+    {
+      name: 'bump',
+      rx: /^bump/i,
+      description: `Bump the button UI up to the top of the chat message`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('bump', args, { createPath: true, force: 'boolean' }) }
+    },
+    {
+      name: 'targetTokens',
+      rx: /^targett/i,
+      description: `Use target instead of select for applying damage to tokens`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) {
+        const result = this.config.changeSetting('targetTokens', args, { createPath: true, force: 'boolean' });
+        if (this.config.getSetting('targetTokens') && result.success && result.msg) result.msg.push(`*Important*: Players cannot use targeting unless TokenMod is set to allow players to use token ids.`);
+        return result;
+       }
+    },
     {
       name: 'reset',
       rx: /^reset/i,
@@ -486,7 +503,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         const parts = args.match(/([^/]+)\/(.+)/);
         if (parts && parts.length === 3) {
           if (this.config.getSetting(`templates/damageProperties/${parts[1]}`) == null) {
-            helpers.toChat(`Created new roll template damage property category: ${parts[1]}`);
+            Helpers.toChat(`Created new roll template damage property category: ${parts[1]}`);
             state[scriptName].settings.templates.damageProperties[parts[1]] = [];
           }
           return this.config.changeSetting(`templates/damageProperties/${parts[1]}`, parts[2]);
@@ -552,7 +569,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
                 (control === 'hide' && usedButtons.includes(button)) ||
                 (control === 'delete' && removableButtons.includes(button))) ?
               control : 'disabled';
-            rowHtml += `<div class="control-${control}" style="${styles.list.buttonContainer}" title="${helpers.emproper(`${control} button`)}"><a href="${links[controlType]}" style="${styles.list.controls.common}${styles.list.controls[controlType]}">${labels[control]}</a></div>`;
+            rowHtml += `<div class="control-${control}" style="${styles.list.buttonContainer}" title="${Helpers.emproper(`${control} button`)}"><a href="${links[controlType]}" style="${styles.list.controls.common}${styles.list.controls[controlType]}">${labels[control]}</a></div>`;
           });
           return `${rowHtml.replace(/%name%/g, button)}</div>`;
         });
@@ -619,18 +636,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       description: `Create a new button`,
       requiredServices: { config: 'ConfigController', buttons: 'ButtonController' },
       action: function (args) {
-        const buttonData = helpers.splitHandlebars(args);
+        const buttonData = Helpers.splitHandlebars(args);
         if (buttonData && buttonData.name) {
           if (/^[^A-Za-z]/.test(buttonData.name)) return { err: `Invalid button name: must start with a letter` };
-          let buttonName = /\s/.test(buttonData.name) ? helpers.camelise(buttonData.name) : buttonData.name;
+          let buttonName = /\s/.test(buttonData.name) ? Helpers.camelise(buttonData.name) : buttonData.name;
           if (this.buttons.getButtonNames().includes(buttonName)) return { err: `Invalid button name, already in use: "${buttonName}"` }
           if (!buttonData.math) return { err: `Button must have an associated function, {{math=...}}` }
           buttonData.default = false;
-          console.info(buttonData);
-          // const newButton = new CustomButton(buttonData);
-          // if (newButton && newButton.math) {
           return this.buttons.addButton(buttonData);
-          // }
         } else return { err: `Bad input for button creation` }
       }
     },
@@ -640,7 +653,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       description: `Edit an existing button`,
       requiredServices: { buttons: 'ButtonController' },
       action: function (args) {
-        let buttonData = helpers.splitHandlebars(args);
+        let buttonData = Helpers.splitHandlebars(args);
         console.log(buttonData);
         if (buttonData && buttonData.name) {
           if (this.buttons.getButtonNames().includes(buttonData.name)) {
@@ -695,7 +708,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'settings',
       rx: /^setting/i,
       description: `Open settings UI`,
-      action: function() { new ChatDialog({ title: `Script Settings UI`, content: `Not yet implemented.` }) }
+      requiredServices: { config: 'ConfigController' },
+      action: function() { this.config.getSettingsMenu() }
     },
     {
       name: 'help',
@@ -709,10 +723,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       description: `Remove all script settings from API state`,
       action: function(args) {
         if (/^undo/i.test(args)) {
-          state[scriptName] = helpers.copyObj(undoUninstall);
+          state[scriptName] = Helpers.copyObj(undoUninstall);
           new ChatDialog({ title: 'Reverse! Reverse the reverse!', content: `State settings have been restored. Let's pretend that never happend, eh?` }, 'error')
         } else if (!undoUninstall) {
-          undoUninstall = helpers.copyObj(state[scriptName]);
+          undoUninstall = Helpers.copyObj(state[scriptName]);
           state[scriptName] = null;
           delete state[scriptName];
           new ChatDialog({
@@ -723,7 +737,113 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         }
       }
     }
-  ]
+  ];
+
+  /**
+   * Must have a valid type to be pulled into SettingsManager as a setting
+   * 'object' type can be used for nesting settings keys
+   * 'validate' is a validator for the input, not necessarily the key itself (e.g. an array might accept strings in the validator)
+   * 'name'/'description' are only used for chat menu
+   * 'menuAction' must be supplied. Starting with '$' will automatically convert into a button, otherwise supply actual text required
+   */
+  const defaultScriptSettings = {
+    sheet: {
+      type: 'string',
+      range: ['dnd5e_r20', 'custom'],
+      validate: function(v) { return this.range.includes(v) },
+      default: 'dnd5e_r20',
+      name: 'Character sheet',
+      description: 'Character sheet in use',
+      menuAction: `$--loadPreset`
+    },
+    templates: {
+      type: 'object',
+      names: {
+        type: 'array',
+        validate: (v) => typeof(v) === 'string',
+        default: [],
+        name: `Roll templates & properties`,
+        description: `Names of roll templates & properties watched by autoButtons`,
+        menuAction: `<a href="!autobut --listTemplates" style="${styles.table.button}">Templates</a><br><a href="!autobut --listProps" style="${styles.table.button}">Properties</a>`,
+      },
+      damageFields:  {
+        type: 'array',
+        validate: (v) => typeof(v) === 'string',
+        default: [],
+      },
+      critFields: {
+        type: 'array',
+        validate: (v) => typeof(v) === 'string',
+        default: []
+      },
+      upcastDamage: {
+        type: 'array',
+        validate: (v) => typeof(v) === 'string',
+        default: []
+      },
+      upcastCrit: {
+        type: 'array',
+        validate: (v) => typeof(v) === 'string',
+        default: []
+      },
+    },
+    enabledButtons: {
+      type: 'array',
+      validate: (v) => typeof(v) === 'string',
+      default: [],
+    },
+    gmOnly: {
+      type: 'boolean',
+      default: true,
+      name: `GM-only buttons`,
+      description: `Whether the buttons are visible to players`,
+      menuAction: `$--gmo`,
+    },
+    hpBar: {
+      type: 'integer',
+      range: [1,2,3],
+      validate: function(v) { return this.range.includes(v) },
+      default: 1,
+      name: `Token HP bar`,
+      description: `Which token bar contains hit points`,
+      menuAction: `$--bar`,
+    },
+    ignoreAPI: {
+      type: 'boolean',
+      default: true,
+      name: `Ignore API posts`,
+      description: `Ignore any automated damage rolls made by scripts`,
+      menuAction: `$--ignoreapi`,
+    },
+    overheal: {
+      type: 'boolean',
+      default: false,
+      name: `Allow overheal`,
+      description: `Allow HP to go above max`,
+      menuAction: `$--overheal`,
+    },
+    overkill: {
+      type: 'boolean',
+      default: false,
+      name: `Allow overkill`,
+      description: `Allow HP to go below 0`,
+      menuAction: `$--overkill`,
+    },
+    targetTokens: {
+      type: 'boolean',
+      default: false,
+      name: `Target tokens`,
+      description: `Use a target click to target token, instead of current selection`,
+      menuAction: `$--targettoken`,
+    },
+    bump: {
+      type: 'boolean',
+      default: true,
+      name: `Slim buttons`,
+      description: `CSS to bump the button container up in chat to save some space`,
+      menuAction: `$--bump`,
+    }
+  }
 
  /**
  * CLASS DEFINITIONS
@@ -757,38 +877,235 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
     }
   }
+
+  class SettingsManager {
+
+    _settingsKeys = {};
+
+    constructor(settingsData = {}) {
+      const processObject = (currentObject, targetPath) => {
+        for (const key in currentObject) {
+          if (!currentObject[key].type) {
+            console.log(`Skipping ${key}, no type found`);
+            continue;
+          }
+          console.log(`Processing ${key}...`);
+          if (currentObject[key].type === 'object' && Helpers.isObj(currentObject[key])) {
+            targetPath[key] = currentObject[key];
+            processObject(currentObject[key], targetPath[key]);
+          }
+          else if (this._validateKey(currentObject[key], currentObject[key].default)) {
+            targetPath[key] = currentObject[key];
+            targetPath[key].value = currentObject[key].default;
+          }
+          else console.warn(`${this.constructor.name}: Bad key used in constructor: ${key} default value does not match specified type`, currentObject[key]);
+        }
+      }
+      processObject(settingsData, this._settingsKeys);
+      console.warn(this._settingsKeys);
+    }
+
+    get settingsKeys() { return this._settingsKeys }
+
+    // Validate a settings key and the stored value
+    _validateKey(settingsKey, settingsValue) {
+      if (!settingsKey) return false;
+      // console.log(`Validating ${settingsValue}...`);
+      const passValidation = (
+          settingsKey.type === 'array' && Array.isArray(settingsValue)
+          || ['float', 'integer', 'number'].includes(settingsKey.type) && typeof(settingsValue) === 'number'
+          || typeof(settingsValue) === settingsKey.type
+        ) ? true : false;
+      // console.log(passValidation);
+      return passValidation;
+    }
+      
+
+    // Validate an input to be stored in a settings key (e.g. may be a primitive value to be stored in an object type key)
+    // Returns undefined for failed validation, otherwise returns value ready for storage
+    _validateNewValue(settingsKey, newValue, options = { forceValidation: null }) {
+      if (!settingsKey || typeof(settingsKey) !== 'object' || !settingsKey.type || newValue === undefined) return console.error(`${this.constructor.name}: Bad settings key`, settingsKey);
+      // Handle keys with validators (Objects and Arrays must have a validator since they can't be passed from Roll20)
+      if (typeof(options.forceValidation) === 'function') {
+        console.log(options.forceValidation);
+        console.log(newValue);
+        if (options.forceValidation(newValue)) return newValue;
+        else return undefined;
+      }
+      else if (typeof(settingsKey.validate) === 'function') {
+        // console.warn(settingsKey.validate);
+        if (settingsKey.validate(newValue)) return newValue;
+        else return undefined;
+      }
+      // Handle booleans
+      else if (settingsKey.type === 'boolean') {
+        if (rx.on.test(newValue)) return true;
+        else if (rx.off.test(newValue)) return false;
+        else return undefined;
+      }
+      // Otherwise, type match
+      else if (settingsKey.type === 'integer' && parseInt(newValue) === parseInt(newValue)) return parseInt(newValue);
+      else if (settingsKey.type === 'float' && parseFloat(newValue) === parseFloat(newValue)) return parseFloat(newValue);
+      else if (settingsKey.type === typeof(newValue)) return newValue;
+      else return undefined;
+    }
+
+    _writeSetting(settingsKey, newValue, options = { overwriteArray: false }) {
+      const validationOptions = (options.overwriteArray) ? { forceValidation: (v) => Array.isArray(v) } : {},
+        validData = this._validateNewValue(settingsKey, newValue, validationOptions);
+      if (validData === undefined) {
+        console.error(`${this.constructor.name}: Settings change not applied, value failed validation`, settingsKey, newValue);
+        return { err: `${this.constructor.name}: Settings change not applied, value failed validation` }
+      }
+      else {
+        if (settingsKey.type === 'array') {
+          if (options.overwriteArray && Array.isArray(newValue)) {
+            settingsKey.value = newValue;
+            return { msg: `Wrote new Array: [${newValue.join(', ')}]` }
+          }
+          else return { msg: Helpers.modifyArray(settingsKey.value, newValue) }
+        }
+        else {
+          settingsKey.value = newValue;
+          return { msg: `Wrote value: ${newValue}` }
+        }
+      }
+    }
+
+    importSettingsValues(importedKeys = {}) {
+      if (typeof(importedKeys) !== 'object') return console.error(`${this.constructor.name}: Bad settings import, must only supply object type`);
+      const processObject = (currentObject, targetPath) => {
+        for (const key in currentObject) {
+          console.log(`Importing ${key}...`);
+          if (targetPath[key]) {
+            if (!targetPath[key].type) {
+              console.log(`Skipping ${key}, no type defined`);
+              continue;
+            }
+            // console.log(targetPath[key]);
+            // console.info(targetPath[key].type, typeof(currentObject[key]));
+            if (targetPath[key].type === 'object' && Helpers.isObj(currentObject[key])) {
+              processObject(currentObject[key], targetPath[key]);
+            }
+            else if (this._validateKey(targetPath[key], currentObject[key])) {
+              // console.log(currentObject[key]);
+              targetPath[key].value = currentObject[key];
+            }
+            else console.warn(`${this.constructor.name}: Key "${key}" failed validation`, currentObject[key]);
+          }
+          else console.warn(`${this.constructor.name}: Key "${key}" does not exist.`, currentObject[key]);
+        }
+      }
+      processObject(importedKeys, this._settingsKeys);
+      // console.info(this._settingsKeys);
+    }
+
+    exportSettingsValues() {
+      const output = {};
+      const processObject = (currentObject, targetPath) => {
+        for (const key in currentObject) {
+          // console.log(`Processing ${key}`, currentObject[key]);
+          if (currentObject[key].type === 'object' && Helpers.isObj(currentObject[key])) {
+            // console.warn(`Creating nested object ${key}`);
+            targetPath[key] = {};
+            processObject(currentObject[key], targetPath[key]);
+          }
+          else if (currentObject[key].type) {
+            targetPath[key] = currentObject[key].value;
+          }
+          // else console.warn(`Skipping ${key}, no type found.`);
+        }
+      }
+      processObject(this._settingsKeys, output);
+      // console.warn(output);
+      return output;
+    }
+
+    // Provide path relative to {Config._settings}, e.g. changeSetting('sheet', 'mySheet');
+    // booleans with no "newValue" supplied will be toggled
+    // Use options.force 'type' to force a type on the setting e.g. array or boolean
+    // Combine with options.createPath: true to create a new setting of the correct type
+    updateSetting(pathString, newValue, options = { createPath: false, overwriteArray: false, force: null }) {
+      if (typeof(pathString) !== 'string' || newValue === undefined) return { err: `Bad path string or no new value supplied.` };
+      // Can probably remove this bit now that a .value key is used
+      const keyName = (pathString.match(/[^/]+$/)||[])[0],
+        path = /.+\/.+/.test(pathString) ? pathString.match(/(.+)\/[^/]+$/)[1] : '',
+        configPath = path ? Helpers.getObjectPath(path, this._settingsKeys, options.createPath) : this._settingsKeys,
+        targetKey = configPath[keyName];
+      if (targetKey) {
+        console.info(`changeSetting - ${keyName}`, targetKey, options, newValue);
+        if (targetKey.type === 'boolean') {
+          newValue = (newValue == null || newValue === '') ? !targetKey.value :
+            rx.on.test(newValue) ? true :
+            rx.off.test(newValue) ? false :
+            newValue;
+        }
+        const result = this._writeSetting(targetKey, newValue, options);
+        if (result.msg) result.msg = `Changed setting: ${keyName}<br>${result.msg}`;
+        else if (result.err) result.err = `Changed setting: ${keyName}<br>${result.err}`;
+        return result;
+      }
+      else {
+        return { err: `Settings key not found - *${pathString}*` }
+      }
+    }
+
+    readSetting(pathString) {
+      if (typeof(pathString) !== 'string') return;
+      const targetKey = Helpers.getObjectPath(pathString, this._settingsKeys, false);
+      return targetKey ? targetKey.value : undefined;
+    }
+
+    getMenuText() {
+      const output = [];
+      const processObject = (currentObject, targetOutput) => {
+        for (const key in currentObject) {
+          if (currentObject[key].type === 'object') {
+            processObject(currentObject[key], targetOutput);
+          }
+          else if (currentObject[key].menuAction) {
+            const name = currentObject[key].name || key,
+              hover = currentObject[key].description ? `title="${currentObject[key].description}"` : ``,
+              settingName = `<div class="setting-name" style="${styles.table.settingName}" ${hover}>${name}</div>`,
+              currentSetting = `${currentObject[key].value}`;
+            // Entry has a custom menu action
+            if (/^[^$]/.test(currentObject[key].menuAction)) {
+              targetOutput.push([ settingName, currentObject[key].menuAction ]);
+            }
+            // Autofill prompt for boolean or defined range
+            else {
+              const queryRange =
+                currentObject[key].type === 'boolean' ? ['True', 'False']
+                : currentObject[key].range ? Helpers.toArray(currentObject[key].range)
+                : '',
+                queryString = queryRange ? `?{Select new value|${queryRange.join('|')}}` : `?{Enter new value}`,
+                cliFlag = (`${currentObject[key].menuAction}`.match(/^$(.+)/)||[])[1] || `--${key}`,
+                commandString = `!${scriptName} ${cliFlag} ${queryString}`;
+              targetOutput.push([ settingName, `<a href="${commandString}" style="${styles.table.button}">${currentSetting}</a>`]);
+            }
+          }
+        }
+      }
+      processObject(this._settingsKeys, output);
+      console.info(output);
+      return output;
+    }
+
+  }
+
   class ConfigController {
 
     _version = { M: 0, m: 0, p: 0 };
 
     constructor(scriptName, scriptData={}) {
+      console.log(`Starting settings manager...`);
       Object.assign(this, {
         name: scriptName || `newScript`,
         // _version: { M: 0, m: 0, p: 0 },
-        _settings: scriptData.settings || {},
+        _settings: new SettingsManager(scriptData.settings) || {},
         _store: scriptData.store || {},
       });
       if (scriptData.version) this.version = scriptData.version;
-    }
-
-    _getObjectPath(pathString, baseObject, createPath, deleteTarget) {
-      const parts = pathString.split(/\/+/g);
-      const objRef = parts.reduce((m,v,i) => {
-        if (m == null) return;
-        if (m[v] == null) {
-          if (createPath) m[v] = {};
-          else return null;
-        }
-        if (deleteTarget && (i === parts.length-1)) delete m[v];
-        else return m[v];}, baseObject)
-      return objRef;
-    }
-
-    // If value exists in array, it will be removed, otherwise it will be added
-    // Do validation beforehand
-    _modifyArray(targetArray, newValue) { 
-      if (!Array.isArray(targetArray || newValue == null)) return { err: `modifyArray error, bad parameters` };
-      return targetArray.includes(newValue) ? { result: 'removed', newArray: targetArray.filter(v=>v!==newValue) } : { result: 'added', newArray: targetArray.concat([newValue]) }
     }
 
     get version() { return `${this._version.M}.${this._version.m}.${this._version.p}` }
@@ -801,16 +1118,24 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
     }
 
-    fromStore(path) { return this._getObjectPath(path, this._store, false) }
+    initialState() {
+      return {
+        version: this.version,
+        settings: this._settings.exportSettingsValues(),
+        store: this._store
+      }
+    }
+
+    fromStore(path) { return Helpers.getObjectPath(path, this._store, false) }
     toStore(path, data) { // Supplying data=null will delete the target
-      const ref = this._getObjectPath(path, this._store, true);
+      const ref = Helpers.getObjectPath(path, this._store, true);
       let msg;
       if (ref) {
         if (data) {
           Object.assign(ref, data);
           msg = `New data written to "${path}"`;
         } else if (data === null) {
-          this._getObjectPath(path, this._store, false, true);
+          Helpers.getObjectPath(path, this._store, false, true);
           msg = `${path} deleted from store.`;
         } else return { success: 0, err: `Bad data supplied (type: ${typeof data})` }
       } else return { success: 0, err: `Bad store path: "${path}"` }
@@ -819,70 +1144,42 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
 
     fetchFromState() {
-      Object.assign(this, {
-        _settings: state[scriptName].settings,
-        _store: state[scriptName].store,
-      });
+      Object.assign(this, { _store: state[scriptName].store, });
+      this._settings.importSettingsValues(state[scriptName].settings);
     }
     saveToState() {
       Object.assign(state[scriptName], {
-        settings: this._settings,
+        settings: this._settings.exportSettingsValues(),
         store: this._store,
       });
     }
 
-    // Provide path relative to {Config._settings}, e.g. changeSetting('sheet', 'mySheet');
-    // booleans with no "newValue" supplied will be toggled
-    // Use options.force 'type' to force a type on the setting e.g. array or boolean
-    // Combine with options.createPath: true to create a new setting of the correct type
-    // TODO: add missing types & options.force switches
-    changeSetting(pathString, newValue, options = { baseObject: this._settings, createPath: false, overwriteArray: false, ignoreBoolen: false, force: null }) {
-      let modded = [];
-      if (typeof(pathString) !== 'string' || newValue === undefined) return;
-      const keyName = (pathString.match(/[^/]+$/)||[])[0],
-        path = /.+\/.+/.test(pathString) ? pathString.match(/(.+)\/[^/]+$/)[1] : '',
-        configPath = path ? this._getObjectPath(path, options.baseObject, options.createPath) : this._settings;
-      if (configPath && keyName) {
-        if ((typeof(configPath[keyName]) === 'boolean' && !options.ignoreBoolen) || options.force === 'boolean') {
-          configPath[keyName] = (newValue == null || newValue === '') ? !configPath[keyName] :
-            rx.on.test(newValue) ? true :
-            rx.off.test(newValue) ? false :
-            configPath[keyName];
-          modded.push(`${keyName}: **${this.getSetting(pathString)}**`);
-        }
-        else if (Array.isArray(configPath[keyName]) && !options.overwriteArray) {
-          const { newArray, result } = this._modifyArray(configPath[keyName], newValue);
-          if (result) {
-            console.log(newArray);
-            configPath[keyName] = newArray;
-            modded.push(`${newValue} was ***${result}*** to **${pathString}**`);
-          }
-        }
-        else {
-          configPath[keyName] = newValue;
-          modded.push(`${keyName}: **${this.getSetting(pathString)}**`);
-        }
-        if (modded.length) {
-          this.saveToState()
-          return { success: 1, msg: modded }
-        }
-      } else {
-        return { success: 0, err: `Bad Config path *${pathString}*` }
-      }
+    changeSetting(pathString, newValue, options) {
+      options = typeof(options) === 'object' ? options : undefined;
+      const result = this._settings.updateSetting(pathString, newValue, options);
+      if (result.msg) this.saveToState();
+      return result;
     }
-    getSetting(pathString, baseObject = this._settings) {
-      if (typeof(pathString) !== 'string') return null;
-      let configValue = this._getObjectPath(pathString, baseObject, false);
-      return (typeof configValue === 'object') ? helpers.copyObj(configValue) : configValue;
+    getSetting(pathString) {
+      const currentValue = this._settings.readSetting(pathString);
+      return (typeof currentValue === 'object') ? Helpers.copyObj(currentValue) : currentValue;
     }
     loadPreset() {
-      const currentSheet = this._settings.sheet || '';
+      const currentSheet = this.getSetting('sheet') || '';
       if (Object.keys(preset).includes(currentSheet)) {
-        this._settings.templates = preset[currentSheet].templates || [];
-        this._settings.enabledButtons = preset[currentSheet].defaultButtons || [];
+        for (const key in preset[currentSheet].templates) {
+          console.info(`Processing ${key} in preset...`);
+          this._settings.updateSetting(`templates/${key}`, preset[currentSheet].templates[key], { overwriteArray: true });
+        }
+        this._settings.updateSetting('enabledButtons', preset[currentSheet].defaultButtons || [], { overwriteArray: true });
         this.saveToState();
         return { res: 1, data: `${this.getSetting('sheet')}` }
       } else return { res: 0, err: `Preset not found for sheet: "${currentSheet}"`}
+    }
+    getSettingsMenu() {
+      const menuOptions = this._settings.getMenuText();
+      menuOptions.unshift(['Key', 'Setting']);
+      new ChatDialog({ title: `${scriptName} Settings`, content: menuOptions }, 'table');
     }
   }
 
@@ -913,7 +1210,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (typeof filters.shown === 'boolean') buttons = buttons.filter(kv => (enabledButtons.includes(kv[0]) === filters.shown));
       if (typeof filters.hidden === 'boolean') buttons = buttons.filter(kv => (enabledButtons.includes(kv[0]) === !filters.hidden));
       const output =  buttons.map(kv=>kv[0]);
-      console.log(`button names: ${output.join(', ')}`);
+      // console.log(`button names: ${output.join(', ')}`);
       return output;
     }
 
@@ -959,6 +1256,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (this._buttons[newButton.name]) return { success: 0, err: `Button "${newButton.name}" already exists` };
       this._buttons[newButton.name] = newButton;
       console.info(this._buttons);
+      console.log(`Saving buttons to store...`);
       this.saveToStore();
       return { success: 1, msg: `New Button "${newButton.name}" successfully created` }
     }
@@ -969,7 +1267,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       this.keys.forEach(k => {
         if (buttonData[k] != null) {
           if (k === 'default') return;
-          if (k === 'math') {
+          else if (k === 'math') {
             let newMath = ButtonController.parseMathString(buttonData[k]);
             if (newMath.err) return newMath;
             else {
@@ -977,6 +1275,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
               this._buttons[buttonData.name].math = newMath;
               modded.push(k);
             }
+          // TODO: edit button fix goes here
           } else {
             this._buttons[buttonData.name][k] = buttonData[k];
             modded.push(k);
@@ -1001,7 +1300,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
     saveToStore() {
       const customButtons = this.getButtonNames({default: false});
-      customButtons.forEach(button => this._Config.toStore(`customButtons/${button}`, helpers.copyObj(this._buttons[button])));
+      customButtons.forEach(button => this._Config.toStore(`customButtons/${button}`, Helpers.copyObj(this._buttons[button])));
       console.log(this._Config.fromStore('customButtons'));
     }
     createApiButton(buttonName, damage, crit) {
@@ -1053,10 +1352,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
   class CustomButton extends Button {
     constructor(buttonData={}) {
       if (!buttonData.math && !buttonData.mathString) return { err: `Button must contain a function in 'math' key.` };
-      buttonData.name = buttonData.name || 'newCustomButton',
-      buttonData.mathString = buttonData.mathString || buttonData.math.toString();
-      buttonData.math = ButtonController.parseMathString(buttonData.mathString);
-      buttonData.style = buttonData.style || 'full';
+      Object.assign(buttonData, {
+        name: buttonData.name || 'newCustomButton',
+        mathString: buttonData.mathString || buttonData.math.toString(),
+        math: ButtonController.parseMathString(buttonData.mathString),
+        style: buttonData.style || 'full',
+        default: false,
+      });
       super(buttonData);
     }
   }
@@ -1082,7 +1384,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
     // Add one or more options to the CLI
     addOptions(optionData) {
-      optionData = helpers.toArray(optionData);
+      optionData = Helpers.toArray(optionData);
       optionData.forEach(data => {
         if (data.name && !this._options[data.name]) {
           const suppliedServices = { cli: this }
@@ -1109,9 +1411,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           args = (command.match(/\s+(.+)/)||['',''])[1];
         for (let option in this._options) {
           if (this._options[option].rx.test(cmd)) {
-            const { success, msg, err } = (this._options[option].action(args) || {});
+            const { msg, err } = (this._options[option].action(args) || {});
             // console.log(msg||err);
-            if (success && msg) changed.push(helpers.toArray(msg).join('<br>'));
+            if (msg) changed.push(Helpers.toArray(msg).join('<br>'));
             if (err) errs.push(err);
           }
         }
@@ -1152,7 +1454,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     static _templates = {
       none: ({content}) => `${content}`,
       default: ({ title, content }) => {
-        const msgArray = content ? helpers.toArray(content) : [],
+        const msgArray = content ? Helpers.toArray(content) : [],
           body = msgArray.map(row => `<div class="default-row" style="line-height: 1.5em;">${row}</div>`).join('')
         return `
           <div class="default" style="${styles.list.container} background-color: #4d4d4d; border-color: #1e7917; text-align: center;">
@@ -1162,8 +1464,35 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             </div>
           </div>`;
       },
+      table: ({ title, content, footerContent }) => {
+        const msgArray = content ? Helpers.toArray(content) : [],
+          columns = msgArray[0].length || 1,
+          tableRows = msgArray.map((row,i) => {
+            const tc = i === 0 ? 'th' : 'td',
+              tcStyle = i === 0 ? styles.table.headerCell : styles.table.cell,
+              trStyle = i === 0 ? styles.table.headerRow : styles.table.row;
+            let cells = ``;
+            for (let i=0; i < columns; i++) { cells += `<${tc} style="${tcStyle}">${row[i]}</${tc}>` }
+            return `
+              <tr style="${trStyle}">
+                ${cells}
+              </tr>`;
+          }).join(''),
+          footer = footerContent ? `<div class="table-footer" style="${styles.table.footer}">${footerContent}</div>` : ``;
+        return `
+        <div class="table" style="${styles.list.container} background-color: #4d4d4d; border-color: #1e7917; text-align: center;">
+          <div class="table-header" style="${styles.list.header}">${title||scriptName}</div>
+          <div class="table-body" style="${styles.table.outer}">
+            <table style="${styles.table.table}">
+              ${tableRows}
+            </table>
+          </div>
+          ${footer}
+        </div>
+        `;
+      },
       error: ({ title, content }) => {
-        const errArray = content ? helpers.toArray(content) : [];
+        const errArray = content ? Helpers.toArray(content) : [];
         return `
           <div class="error" style="${styles.list.container} border-color: #8d1a1a; background-color: #646464; text-align: center;">
             <div class="error-header" style="${styles.list.header} font-weight: bold;">${title}</div>
@@ -1189,7 +1518,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       this.msg = ChatDialog._templates[template] ? ChatDialog._templates[template](message) : null;
       if (this.msg) {
         this.msg = this.msg.replace(/\n/g, '');
-        if (autoSend) helpers.toChat(this.msg);
+        if (autoSend) Helpers.toChat(this.msg);
       } else {
         console.warn(`${scriptName}: error creating chat dialog, missing template "${template}"`);
         return {};
