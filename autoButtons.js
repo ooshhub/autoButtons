@@ -121,8 +121,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
     // Deconstruct roll
     const handleDamageRoll = (msg) => {
-      const dmgFields = Config.getSetting('templates/damageProperties/damage')||[],
-        critFields = Config.getSetting('templates/damageProperties/crit')||[];
+      const dmgFields = Config.getSetting('templates/damageProperties/damageFields')||[],
+        critFields = Config.getSetting('templates/damageProperties/critFields')||[];
       const damage = Helpers.processFields(dmgFields, msg),
         crit = Helpers.processFields(critFields, msg);
       if ('dnd5e_r20' === Config.getSetting('sheet')) {
@@ -140,7 +140,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     // The input... it must be handled
     const handleInput = (msg) => {
       const msgIsGM = playerIsGM(msg.playerid);
-      if (msg.type === 'api' && msgIsGM && /^!(autobut)/i.test(msg.content)) {
+      if (msg.type === 'api' && msgIsGM && /^!autobut(ton)?s?\b/i.test(msg.content)) {
         const cmdLine = (msg.content.match(/^![^\s]+\s+(.+)/i) || [])[1],
           commands = cmdLine ? cmdLine.split(/\s*--\s*/g) : [];
         commands.shift();
@@ -170,10 +170,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       sheet: ['dnd5e_r20'],
       templates: {
         names: ['atkdmg', 'dmg', 'npcfullatk', 'npcdmg'],
-        damageFields: ['dmg1', 'dmg2', 'globaldamage'],
-        critFields: ['crit1', 'crit2', 'globaldamagecrit'],
-        upcastDamage: ['hldmg'],
-        upcastCrit: ['hldmgcrit'],
+        damageProperties: {
+          damageFields: ['dmg1', 'dmg2', 'globaldamage'],
+          critFields: ['crit1', 'crit2', 'globaldamagecrit'],
+          upcastDamage: ['hldmg'],
+          upcastCrit: ['hldmgcrit'],
+        },
       },
       defaultButtons: ['damageCrit', 'damageFull', 'damageHalf', 'healingFull'],
       // userButtons array, to save user button setup?
@@ -182,8 +184,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       sheet: [],
       templates: {
         names: [],
-        damageFields: [],
-        critFields: [],
+        damageProperties: {
+          damageFields: [],
+          critFields: [],
+        },
       },
       defaultButtons: []
     }
@@ -213,21 +217,33 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         hide: `color: #2a2a2a;`,
         disabled: `color: gray; cursor: pointer;`,
         delete: `color: darkred;`,
-        create: `display: inline-block; background-color: darkgray; padding: 0px; margin: 0px; border: 1px solid #c2c2c2; border-radius: 3px;	color: #066a66; padding: 2px 5px 2px 5px; font-size: 1.1em; line-height: 1.2em;`,
+        create: `display: inline-block; background-color: darkgray; padding: 0px; margin: 1rem 0; border: 1px solid #c2c2c2; border-radius: 3px;	color: #066a66; padding: 2px 5px 2px 5px; font-size: 1.1em; line-height: 1.2em;`,
         no: `position: absolute; left: 0.4em; font-weight: bold; font-family: arial;`
       },
       footer: `text-align: center; font-weight: bold; padding: 6px 0px 6px 0px; border-top: solid 1px darkgray; line-height: 1.5em;`,
     },
     table: {
-      outer: `overflow-x: auto;`,
+      outer: `overflow-x: auto; width: 100%;`,
       table: `margin: 1rem auto; width: 95%; justify-content: center; border: 1px solid #7fb07f;`,
       headerRow: ``,
       row: `background-color: #5e5e63; margin: 0.5rem;`,
       headerCell: `	text-align: center; font-size: 1.7rem; padding: 1rem; border-bottom: 1px solid #7fb07f;`,
-      cell: `padding: 0.5rem 1rem;`,
-      footer: ``,
+      cell: `padding: 0.5rem 1rem; line-height: 3.5rem;`,
+      rowBorders: `border-top: 1px solid #7fb07f;`,
+      footer: `margin: 0 auto 1.5rem auto;`,
       settingName: `border: 1px solid whitesmoke; padding: 0.4rem 0; border-radius: 0.5rem; cursor: help;`,
       button: `	display: inline-block; background-color: darkgray; border: 1px solid #cae1df; box-shadow: 0px 0px 3px #bcdbd8; border-radius: 3px; color: #045754; padding: 0.3rem 0.5rem; margin: 0.2rem 0!important; font-size: 1.1em; line-height: 1.2em;`,
+    },
+    components: {
+      labelWithDelete: function(label, commandString) {
+        const styleOuter = `border: 1px solid whitesmoke; padding: 0.2rem 0rem; border-radius: 0.5rem; width: max-content; margin: auto; display: inline-block; line-height: 1.2rem; white-space: nowrap;`,
+          styleDelete = `font-family: pictos; color: darkred;	background-color: gray; height: 1rem; line-height: 1.2rem; width: 1.2rem; text-align: center; margin: 0 1rem; border: 1px solid #aaa8a8; border-radius: 0.5rem;`,
+          styleLabel = `display: inline-block; overflow-x: clip; margin-left: 0.5rem;`
+        return `<div class="label-delete" style="${styleOuter}"><div style="${styleLabel}">${label}</div><a href="${commandString}" class="delete-button" style="${styleDelete}" title="Delete">&ast;</a></div>`
+      },
+      confirmApiCommand: function(confirmAction) {
+        return `!autobut?{Are you sure you wish to ${confirmAction}|Yes,&nbsp;|No,fffff}`;
+      },
     },
     // BUMP setting CSS - if Roll20 dick with the chatbar CSS this will need to be updated
     mods: {
@@ -351,13 +367,30 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     static modifyArray(targetArray, newValue) { 
       if (!Array.isArray(targetArray || newValue == null)) return { err: `modifyArray error, bad parameters` };
       if (targetArray.includes(newValue)) {
-        targetArray = targetArray.filter(v=>v!==newValue);
+          Helpers.filterAndMutate(targetArray, (v) => v === newValue);
         return { msg: `Removed ${newValue} from array.` }
       }
       else {
         targetArray = targetArray.push(newValue);
         return { msg: `Added ${newValue} to array.` }
       }
+    }
+
+    /**
+     * Filter an array by reference
+     * @param {array.<string>} inputArray
+     * @param {function} predicate 
+     * @return {boolean} success/failure
+     */
+    static filterAndMutate(inputArray, predicate) {
+      if (typeof(predicate) !== 'function' || !Array.isArray(inputArray)) {
+        console.error(`filterMutate requires an array and a predicate function.`);
+        return false;
+      }
+      for (let i=inputArray.length-1; i>=0; i--) {
+        if (predicate(inputArray[i])) inputArray.splice(i, 1);
+      }
+      return true;
     }
 
     static copyOldButtonStore() {
@@ -435,7 +468,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         const newVal = args.trim();
         if (Object.keys(preset).includes(newVal)) {
           const newSheet = this.config.changeSetting('sheet', newVal);
-          if (newSheet.success) {
+          if (newSheet.msg) {
             this.config.loadPreset();
             this.buttons.verifyButtons();
             return { success: 1, msg: `Preset changed: ${newVal}` };
@@ -450,8 +483,15 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       requiredServices: { config: 'ConfigController' },
       action: function () {
         const templates = this.config.getSetting(`templates/names`),
-          templateText = `&nbsp;${templates.join(', ')}`;
-        new ChatDialog({ content: templateText, title: `Roll Template List` });        
+          confirm = styles.components.confirmApiCommand(`delete this template name?`),
+          templateText = Helpers.toArray(templates).map(v => [
+            // `<div style="">${v}</div>`,
+            // `<a href="!autobut --deleteTemplate ${v}" style="${styles.table.button}">Delete</a>`
+            styles.components.labelWithDelete(v, `${confirm}autobut --deleteTemplate ${v}`)
+          ]),
+          footerContent = `<a href="!autobut --addTemplate ?{Roll template name}" style="${styles.list.controls.create}">Add template</a>`;
+        templateText.unshift([ 'Template name']);
+        new ChatDialog({ content: templateText, title: `Roll Template List`, footer: footerContent }, 'table');
       }
     },
     {
@@ -469,12 +509,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     },
     {
       name: 'removeTemplate',
-      rx: /^rem(ove)?tem/i,
+      rx: /^(remove|delete)tem/i,
       description: `Remove roll template from listen list`,
       requiredServices: { config: 'ConfigController' },
       action: function (args) {
         if (this.config.getSetting('templates/names').includes(args)) {
-          const result = this.config.changeSetting(args, 'templates/names');
+          const result = this.config.changeSetting('templates/names', args);
           if (result.success) result.msg = `Removed template ${args} to listener list`;
           return result;
         }
@@ -486,12 +526,20 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       description: `List roll template properties inline rolls are grabbed from`,
       requiredServices: { config: 'ConfigController' },
       action: function () {
-        const properties = this.config.getSetting('templates/damageProperties');
-        let templateText = [];
+        const properties = this.config.getSetting('templates/damageProperties'),
+          confirm = styles.components.confirmApiCommand(`delete this template property?`);
+        console.log(properties);
+        let templateText = [ ['Category', 'Properties'] ];
         if (typeof properties === 'object') {
-          for (let category in properties) templateText.push(`&nbsp;${category}=${properties[category].join(`, `)}`);
+          for (let category in properties) {
+            const propButtons = properties[category].map(prop => styles.components.labelWithDelete(prop, `${confirm}autobut --deleteprop ${category}/${prop}`));
+            templateText.push([
+              category,
+              `${propButtons.join(`<br>`)}<br><a href="!autobut --addProp ${category}/?{Roll template property name}" style="${styles.list.controls.create}">Add Property</a>`
+            ]);
+          }
         } else return { err: `Error getting damage properties from state` }
-        new ChatDialog({ title: 'Roll Template Properties', content: templateText });
+        new ChatDialog({ title: 'Roll Template Properties', content: templateText, borders: { row: true } }, 'table');
       }
     },
     {
@@ -514,7 +562,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     },
     {
       name: 'removeProperty',
-      rx: /^rem(ove)?prop/i,
+      rx: /^(remove|delete)?prop/i,
       description: `Remove a roll template property from the listener`,
       requiredServices: { config: 'ConfigController',  },
       action: function (args) {
@@ -766,25 +814,36 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         description: `Names of roll templates & properties watched by autoButtons`,
         menuAction: `<a href="!autobut --listTemplates" style="${styles.table.button}">Templates</a><br><a href="!autobut --listProps" style="${styles.table.button}">Properties</a>`,
       },
-      damageFields:  {
-        type: 'array',
-        validate: (v) => typeof(v) === 'string',
-        default: [],
-      },
-      critFields: {
-        type: 'array',
-        validate: (v) => typeof(v) === 'string',
-        default: []
-      },
-      upcastDamage: {
-        type: 'array',
-        validate: (v) => typeof(v) === 'string',
-        default: []
-      },
-      upcastCrit: {
-        type: 'array',
-        validate: (v) => typeof(v) === 'string',
-        default: []
+      damageProperties: {
+        type: 'object',
+        damageFields:  {
+          type: 'array',
+          validate: (v) => typeof(v) === 'string',
+          default: [],
+        },
+        critFields: {
+          type: 'array',
+          validate: (v) => typeof(v) === 'string',
+          default: []
+        },
+        upcastDamage: {
+          type: 'array',
+          validate: (v) => typeof(v) === 'string',
+          default: []
+        },
+        upcastCrit: {
+          type: 'array',
+          validate: (v) => typeof(v) === 'string',
+          default: []
+        },
+        get value() {
+          const output = {};
+          for (const key in this) {
+            if (key === 'value') continue;
+            if (this[key].value) output[key] = this[key].value;
+          }
+          return output;
+        }
       },
     },
     enabledButtons: {
@@ -961,13 +1020,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (settingsKey.type === 'array') {
           if (options.overwriteArray && Array.isArray(newValue)) {
             settingsKey.value = newValue;
-            return { msg: `Wrote new Array: [${newValue.join(', ')}]` }
+            return { msg: `Saved new Array: [${newValue.join(', ')}]` }
           }
-          else return { msg: Helpers.modifyArray(settingsKey.value, newValue) }
+          else return Helpers.modifyArray(settingsKey.value, newValue);
         }
         else {
           settingsKey.value = newValue;
-          return { msg: `Wrote value: ${newValue}` }
+          return { msg: `Saved value: ${newValue}` }
         }
       }
     }
@@ -1041,8 +1100,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             newValue;
         }
         const result = this._writeSetting(targetKey, newValue, options);
-        if (result.msg) result.msg = `Changed setting: ${keyName}<br>${result.msg}`;
-        else if (result.err) result.err = `Changed setting: ${keyName}<br>${result.err}`;
+        if (result.msg) result.msg = `Changed setting: ${pathString}<br>${result.msg}`;
+        else if (result.err) result.err = `Changed setting: ${pathString}<br>${result.err}`;
         return result;
       }
       else {
@@ -1053,9 +1112,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     readSetting(pathString) {
       if (typeof(pathString) !== 'string') return;
       const targetKey = Helpers.getObjectPath(pathString, this._settingsKeys, false);
+      // console.log(targetKey, this._settingsKeys);
       return targetKey ? targetKey.value : undefined;
     }
 
+    // Export this._settingsKeys as chatbar-friendly text
     getMenuText() {
       const output = [];
       const processObject = (currentObject, targetOutput) => {
@@ -1079,7 +1140,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
                 : currentObject[key].range ? Helpers.toArray(currentObject[key].range)
                 : '',
                 queryString = queryRange ? `?{Select new value|${queryRange.join('|')}}` : `?{Enter new value}`,
-                cliFlag = (`${currentObject[key].menuAction}`.match(/^$(.+)/)||[])[1] || `--${key}`,
+                cliFlag = (`${currentObject[key].menuAction}`.match(/^\$(.+)/)||[])[1] || `--${key}`,
                 commandString = `!${scriptName} ${cliFlag} ${queryString}`;
               targetOutput.push([ settingName, `<a href="${commandString}" style="${styles.table.button}">${currentSetting}</a>`]);
             }
@@ -1087,7 +1148,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         }
       }
       processObject(this._settingsKeys, output);
-      console.info(output);
+      // console.info(output);
       return output;
     }
 
@@ -1157,19 +1218,26 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     changeSetting(pathString, newValue, options) {
       options = typeof(options) === 'object' ? options : undefined;
       const result = this._settings.updateSetting(pathString, newValue, options);
+      console.warn(`Setting change attempted`, result);
       if (result.msg) this.saveToState();
       return result;
     }
     getSetting(pathString) {
+      // console.log(pathString); 
       const currentValue = this._settings.readSetting(pathString);
+      // console.info(currentValue);
       return (typeof currentValue === 'object') ? Helpers.copyObj(currentValue) : currentValue;
     }
     loadPreset() {
+      // console.warn(state[scriptName]);
       const currentSheet = this.getSetting('sheet') || '';
       if (Object.keys(preset).includes(currentSheet)) {
-        for (const key in preset[currentSheet].templates) {
+        // Load template names
+        this._settings.updateSetting('templates/names', preset[currentSheet].templates.names, { overwriteArray: true });
+        // Load damage properties
+        for (const key in preset[currentSheet].templates.damageProperties) {
           console.info(`Processing ${key} in preset...`);
-          this._settings.updateSetting(`templates/${key}`, preset[currentSheet].templates[key], { overwriteArray: true });
+          this._settings.updateSetting(`templates/damageProperties/${key}`, preset[currentSheet].templates.damageProperties[key], { overwriteArray: true });
         }
         this._settings.updateSetting('enabledButtons', preset[currentSheet].defaultButtons || [], { overwriteArray: true });
         this.saveToState();
@@ -1215,6 +1283,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
 
     static parseMathString(inputString) {
+      console.log(inputString);
+      inputString = `${inputString}`;
       let err = '';
       // Convert to JS
       const formulaReplacer = {
@@ -1251,6 +1321,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
     }
     addButton(buttonData={}) {
+      console.warn(buttonData);
       const newButton = buttonData.default === false ? new CustomButton(buttonData) : new Button(buttonData);
       if (newButton.err) return { success: 0, err: newButton.err }
       if (this._buttons[newButton.name]) return { success: 0, err: `Button "${newButton.name}" already exists` };
@@ -1310,7 +1381,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         overkill = this._Config.getSetting('overkill');
       if (!btn || typeof(btn.math) !== 'function') {
         console.error(`${scriptName}: error creating API button ${buttonName}`);
-        console.error(`No button found or invalid math function: "${btn.math}"`);
+        // console.error(`No button found or invalid math function"`, btn);
         return ``;
       }
       const modifier = btn.math(damage, crit),
@@ -1351,11 +1422,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   class CustomButton extends Button {
     constructor(buttonData={}) {
+      console.info(buttonData);
       if (!buttonData.math && !buttonData.mathString) return { err: `Button must contain a function in 'math' key.` };
       Object.assign(buttonData, {
         name: buttonData.name || 'newCustomButton',
         mathString: buttonData.mathString || buttonData.math.toString(),
-        math: ButtonController.parseMathString(buttonData.mathString),
+        math: ButtonController.parseMathString(buttonData.mathString || buttonData.math.toString()),
         style: buttonData.style || 'full',
         default: false,
       });
@@ -1464,12 +1536,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             </div>
           </div>`;
       },
-      table: ({ title, content, footerContent }) => {
+      table: ({ title, content, footer, borders }) => {
+        console.info(content);
+        const rowBorders = borders && borders.row ? styles.table.rowBorders : ``;
         const msgArray = content ? Helpers.toArray(content) : [],
           columns = msgArray[0].length || 1,
           tableRows = msgArray.map((row,i) => {
             const tc = i === 0 ? 'th' : 'td',
-              tcStyle = i === 0 ? styles.table.headerCell : styles.table.cell,
+              tcStyle = i === 0 ? styles.table.headerCell : `${styles.table.cell}${rowBorders}`,
               trStyle = i === 0 ? styles.table.headerRow : styles.table.row;
             let cells = ``;
             for (let i=0; i < columns; i++) { cells += `<${tc} style="${tcStyle}">${row[i]}</${tc}>` }
@@ -1478,7 +1552,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
                 ${cells}
               </tr>`;
           }).join(''),
-          footer = footerContent ? `<div class="table-footer" style="${styles.table.footer}">${footerContent}</div>` : ``;
+          footerContent = footer ? `<div class="table-footer" style="${styles.table.footer}">${footer}</div>` : ``;
         return `
         <div class="table" style="${styles.list.container} background-color: #4d4d4d; border-color: #1e7917; text-align: center;">
           <div class="table-header" style="${styles.list.header}">${title||scriptName}</div>
@@ -1487,7 +1561,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
               ${tableRows}
             </table>
           </div>
-          ${footer}
+          ${footerContent}
         </div>
         `;
       },
