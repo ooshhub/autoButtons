@@ -2,9 +2,16 @@
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.6.0`;
-    // debugLevel = 4;
+    scriptVersion = `0.6.0`,
+    debugLevel = 3;
   let undoUninstall = null;
+
+  const debug = {
+    log: function(...args) { if (debugLevel > 3) console.log(...args) },
+    info: function(...args) { if (debugLevel > 2) console.info(...args) },
+    warn: function(...args) { if (debugLevel > 1) console.warn(...args) },
+    error: function(...args) { if (debugLevel > 0) console.error(...args) },
+  }
   
 /**
  * CORE SCRIPT
@@ -79,13 +86,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         state[scriptName].version = Config.version;
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
       }
-      // console.log(`Finished version checking...`);
       Config.fetchFromState();
-      // console.log('fetched...');
       if (
         (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
         (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
-          console.log(`Loading preset...`);
+          // debug.log(`Loading preset...`);
           Config.loadPreset();
           if (!firstTimeSetup) new ChatDialog({ title: `${scriptName} Install`, content:`Error fetching Config - loaded preset defaults` }, 'error');
       }
@@ -94,14 +99,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       for (const button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].default = false;
         const { err } = ButtonStore.addButton(state[scriptName].store.customButtons[button]);
-				if (err) console.error(`${err}`);
+				if (err) debug.error(`${err}`);
       }
-      // console.log(`Checking for valid buttons...`);
       const allButtons = ButtonStore.getButtonNames(),
         enabledButtons = Config.getSetting('enabledButtons');
       const validButtons = enabledButtons.filter(v => allButtons.includes(v));
       if (validButtons.length !== enabledButtons.length) {
-				console.warn(`Invalid button found in enabledButtons - button hidden.`);
+				debug.warn(`Invalid button found in enabledButtons - button hidden.`);
         Config.changeSetting('enabledButtons', validButtons, { overwriteArray: true });
       }
       log(`=( Initialised ${scriptName} - v${Config.version} )=`);
@@ -144,7 +148,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         const cmdLine = (msg.content.match(/^![^\s]+\s+(.+)/i) || [])[1],
           commands = cmdLine ? cmdLine.split(/\s*--\s*/g) : [];
         commands.shift();
-        // console.log(commands);
+        debug.log(commands);
         if (commands.length) CLI.assess(commands);
       }
       else if (msg.rolltemplate && Config.getSetting('templates/names').includes(msg.rolltemplate)) {
@@ -228,7 +232,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       headerRow: ``,
       row: `background-color: #5e5e63; margin: 0.5rem;`,
       headerCell: `	text-align: center; font-size: 1.7rem; padding: 1rem; border-bottom: 1px solid #7fb07f;`,
-      cell: `padding: 0.5rem 1rem; line-height: 3.5rem;`,
+      cell: `padding: 0.2rem 1rem; line-height: 3.5rem;`,
       rowBorders: `border-top: 1px solid #7fb07f;`,
       footer: `margin: 0 auto 1.5rem auto;`,
       settingName: `border: 1px solid whitesmoke; padding: 0.4rem 0; border-radius: 0.5rem; cursor: help;`,
@@ -384,7 +388,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
      */
     static filterAndMutate(inputArray, predicate) {
       if (typeof(predicate) !== 'function' || !Array.isArray(inputArray)) {
-        console.error(`filterMutate requires an array and a predicate function.`);
+        debug.error(`filterMutate requires an array and a predicate function.`);
         return false;
       }
       for (let i=inputArray.length-1; i>=0; i--) {
@@ -527,14 +531,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       requiredServices: { config: 'ConfigController' },
       action: function () {
         const properties = this.config.getSetting('templates/damageProperties'),
-          confirm = styles.components.confirmApiCommand(`delete this template property?`);
-        console.log(properties);
+          confirm = styles.components.confirmApiCommand(`delete this template property?`),
+          styleCategory = `font-size: 1.4rem; font-weight: bold; font-style: italic;`
         let templateText = [ ['Category', 'Properties'] ];
         if (typeof properties === 'object') {
           for (let category in properties) {
             const propButtons = properties[category].map(prop => styles.components.labelWithDelete(prop, `${confirm}autobut --deleteprop ${category}/${prop}`));
             templateText.push([
-              category,
+              `<span style="${styleCategory}">${category}</span>`,
               `${propButtons.join(`<br>`)}<br><a href="!autobut --addProp ${category}/?{Roll template property name}" style="${styles.list.controls.create}">Add Property</a>`
             ]);
           }
@@ -702,7 +706,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       requiredServices: { buttons: 'ButtonController' },
       action: function (args) {
         let buttonData = Helpers.splitHandlebars(args);
-        console.log(buttonData);
+        debug.log(buttonData);
         if (buttonData && buttonData.name) {
           if (this.buttons.getButtonNames().includes(buttonData.name)) {
             return this.buttons.editButton(buttonData);
@@ -945,10 +949,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const processObject = (currentObject, targetPath) => {
         for (const key in currentObject) {
           if (!currentObject[key].type) {
-            console.log(`Skipping ${key}, no type found`);
+            debug.log(`Skipping ${key}, no type found`);
             continue;
           }
-          console.log(`Processing ${key}...`);
+          debug.log(`Processing ${key}...`);
           if (currentObject[key].type === 'object' && Helpers.isObj(currentObject[key])) {
             targetPath[key] = currentObject[key];
             processObject(currentObject[key], targetPath[key]);
@@ -957,11 +961,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             targetPath[key] = currentObject[key];
             targetPath[key].value = currentObject[key].default;
           }
-          else console.warn(`${this.constructor.name}: Bad key used in constructor: ${key} default value does not match specified type`, currentObject[key]);
+          else debug.warn(`${this.constructor.name}: Bad key used in constructor: ${key} default value does not match specified type`, currentObject[key]);
         }
       }
       processObject(settingsData, this._settingsKeys);
-      console.warn(this._settingsKeys);
+      debug.log(this._settingsKeys);
     }
 
     get settingsKeys() { return this._settingsKeys }
@@ -969,13 +973,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     // Validate a settings key and the stored value
     _validateKey(settingsKey, settingsValue) {
       if (!settingsKey) return false;
-      // console.log(`Validating ${settingsValue}...`);
+      // debug.log(`Validating ${settingsValue}...`);
       const passValidation = (
           settingsKey.type === 'array' && Array.isArray(settingsValue)
           || ['float', 'integer', 'number'].includes(settingsKey.type) && typeof(settingsValue) === 'number'
           || typeof(settingsValue) === settingsKey.type
         ) ? true : false;
-      // console.log(passValidation);
+      // debug.log(passValidation);
       return passValidation;
     }
       
@@ -983,16 +987,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     // Validate an input to be stored in a settings key (e.g. may be a primitive value to be stored in an object type key)
     // Returns undefined for failed validation, otherwise returns value ready for storage
     _validateNewValue(settingsKey, newValue, options = { forceValidation: null }) {
-      if (!settingsKey || typeof(settingsKey) !== 'object' || !settingsKey.type || newValue === undefined) return console.error(`${this.constructor.name}: Bad settings key`, settingsKey);
+      if (!settingsKey || typeof(settingsKey) !== 'object' || !settingsKey.type || newValue === undefined) return debug.error(`${this.constructor.name}: Bad settings key`, settingsKey);
       // Handle keys with validators (Objects and Arrays must have a validator since they can't be passed from Roll20)
       if (typeof(options.forceValidation) === 'function') {
-        console.log(options.forceValidation);
-        console.log(newValue);
         if (options.forceValidation(newValue)) return newValue;
         else return undefined;
       }
       else if (typeof(settingsKey.validate) === 'function') {
-        // console.warn(settingsKey.validate);
         if (settingsKey.validate(newValue)) return newValue;
         else return undefined;
       }
@@ -1013,7 +1014,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const validationOptions = (options.overwriteArray) ? { forceValidation: (v) => Array.isArray(v) } : {},
         validData = this._validateNewValue(settingsKey, newValue, validationOptions);
       if (validData === undefined) {
-        console.error(`${this.constructor.name}: Settings change not applied, value failed validation`, settingsKey, newValue);
+        debug.error(`${this.constructor.name}: Settings change not applied, value failed validation`, settingsKey, newValue);
         return { err: `${this.constructor.name}: Settings change not applied, value failed validation` }
       }
       else {
@@ -1032,51 +1033,43 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
 
     importSettingsValues(importedKeys = {}) {
-      if (typeof(importedKeys) !== 'object') return console.error(`${this.constructor.name}: Bad settings import, must only supply object type`);
+      if (typeof(importedKeys) !== 'object') return debug.error(`${this.constructor.name}: Bad settings import, must only supply object type`);
       const processObject = (currentObject, targetPath) => {
         for (const key in currentObject) {
-          console.log(`Importing ${key}...`);
           if (targetPath[key]) {
             if (!targetPath[key].type) {
-              console.log(`Skipping ${key}, no type defined`);
+              debug.log(`Skipping ${key}, no type defined`);
               continue;
             }
-            // console.log(targetPath[key]);
-            // console.info(targetPath[key].type, typeof(currentObject[key]));
             if (targetPath[key].type === 'object' && Helpers.isObj(currentObject[key])) {
               processObject(currentObject[key], targetPath[key]);
             }
             else if (this._validateKey(targetPath[key], currentObject[key])) {
-              // console.log(currentObject[key]);
               targetPath[key].value = currentObject[key];
             }
-            else console.warn(`${this.constructor.name}: Key "${key}" failed validation`, currentObject[key]);
+            else debug.warn(`${this.constructor.name}: Key "${key}" failed validation`, currentObject[key]);
           }
-          else console.warn(`${this.constructor.name}: Key "${key}" does not exist.`, currentObject[key]);
+          else debug.warn(`${this.constructor.name}: Key "${key}" does not exist.`, currentObject[key]);
         }
       }
       processObject(importedKeys, this._settingsKeys);
-      // console.info(this._settingsKeys);
+      debug.log(this._settingsKeys);
     }
 
     exportSettingsValues() {
       const output = {};
       const processObject = (currentObject, targetPath) => {
         for (const key in currentObject) {
-          // console.log(`Processing ${key}`, currentObject[key]);
           if (currentObject[key].type === 'object' && Helpers.isObj(currentObject[key])) {
-            // console.warn(`Creating nested object ${key}`);
             targetPath[key] = {};
             processObject(currentObject[key], targetPath[key]);
           }
           else if (currentObject[key].type) {
             targetPath[key] = currentObject[key].value;
           }
-          // else console.warn(`Skipping ${key}, no type found.`);
         }
       }
       processObject(this._settingsKeys, output);
-      // console.warn(output);
       return output;
     }
 
@@ -1092,7 +1085,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         configPath = path ? Helpers.getObjectPath(path, this._settingsKeys, options.createPath) : this._settingsKeys,
         targetKey = configPath[keyName];
       if (targetKey) {
-        console.info(`changeSetting - ${keyName}`, targetKey, options, newValue);
+        debug.log(`changeSetting - ${keyName}`, targetKey, options, newValue);
         if (targetKey.type === 'boolean') {
           newValue = (newValue == null || newValue === '') ? !targetKey.value :
             rx.on.test(newValue) ? true :
@@ -1112,7 +1105,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     readSetting(pathString) {
       if (typeof(pathString) !== 'string') return;
       const targetKey = Helpers.getObjectPath(pathString, this._settingsKeys, false);
-      // console.log(targetKey, this._settingsKeys);
       return targetKey ? targetKey.value : undefined;
     }
 
@@ -1148,7 +1140,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         }
       }
       processObject(this._settingsKeys, output);
-      // console.info(output);
       return output;
     }
 
@@ -1159,10 +1150,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     _version = { M: 0, m: 0, p: 0 };
 
     constructor(scriptName, scriptData={}) {
-      console.log(`Starting settings manager...`);
       Object.assign(this, {
         name: scriptName || `newScript`,
-        // _version: { M: 0, m: 0, p: 0 },
         _settings: new SettingsManager(scriptData.settings) || {},
         _store: scriptData.store || {},
       });
@@ -1174,7 +1163,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (typeof(newVersion) === 'object' && newVersion.M && newVersion.m && newVersion.p) Object.assign(this._version, newVersion);
       else {
         const parts = `${newVersion}`.split(/\./g);
-        if (!parts.length) console.error(`Bad version number, not setting version.`)
+        if (!parts.length) debug.error(`Bad version number, not setting version.`)
         else Object.keys(this._version).forEach((v,i) => this._version[v] = parseInt(parts[i]) || 0);
       }
     }
@@ -1218,25 +1207,22 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     changeSetting(pathString, newValue, options) {
       options = typeof(options) === 'object' ? options : undefined;
       const result = this._settings.updateSetting(pathString, newValue, options);
-      console.warn(`Setting change attempted`, result);
+      debug.log(`Setting change attempted`, result);
       if (result.msg) this.saveToState();
       return result;
     }
     getSetting(pathString) {
-      // console.log(pathString); 
       const currentValue = this._settings.readSetting(pathString);
-      // console.info(currentValue);
       return (typeof currentValue === 'object') ? Helpers.copyObj(currentValue) : currentValue;
     }
     loadPreset() {
-      // console.warn(state[scriptName]);
       const currentSheet = this.getSetting('sheet') || '';
       if (Object.keys(preset).includes(currentSheet)) {
         // Load template names
         this._settings.updateSetting('templates/names', preset[currentSheet].templates.names, { overwriteArray: true });
         // Load damage properties
         for (const key in preset[currentSheet].templates.damageProperties) {
-          console.info(`Processing ${key} in preset...`);
+          // debug.info(`Processing ${key} in preset...`);
           this._settings.updateSetting(`templates/damageProperties/${key}`, preset[currentSheet].templates.damageProperties[key], { overwriteArray: true });
         }
         this._settings.updateSetting('enabledButtons', preset[currentSheet].defaultButtons || [], { overwriteArray: true });
@@ -1245,9 +1231,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       } else return { res: 0, err: `Preset not found for sheet: "${currentSheet}"`}
     }
     getSettingsMenu() {
-      const menuOptions = this._settings.getMenuText();
+      const menuOptions = this._settings.getMenuText(),
+        confirm = styles.components.confirmApiCommand(`reset to default sheet settings?`),
+        footerContent = `<div style="${styles.table.footer}"><a href="${confirm} --reset" style="${styles.list.controls.create}">Reset Sheet Settings</a>`;
       menuOptions.unshift(['Key', 'Setting']);
-      new ChatDialog({ title: `${scriptName} Settings`, content: menuOptions }, 'table');
+      new ChatDialog({ title: `${scriptName} Settings`, content: menuOptions, footer: footerContent }, 'table');
     }
   }
 
@@ -1278,12 +1266,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (typeof filters.shown === 'boolean') buttons = buttons.filter(kv => (enabledButtons.includes(kv[0]) === filters.shown));
       if (typeof filters.hidden === 'boolean') buttons = buttons.filter(kv => (enabledButtons.includes(kv[0]) === !filters.hidden));
       const output =  buttons.map(kv=>kv[0]);
-      // console.log(`button names: ${output.join(', ')}`);
+      // debug.log(`button names: ${output.join(', ')}`);
       return output;
     }
 
     static parseMathString(inputString) {
-      console.log(inputString);
+      debug.log(inputString);
       inputString = `${inputString}`;
       let err = '';
       // Convert to JS
@@ -1321,33 +1309,35 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
     }
     addButton(buttonData={}) {
-      console.warn(buttonData);
       const newButton = buttonData.default === false ? new CustomButton(buttonData) : new Button(buttonData);
       if (newButton.err) return { success: 0, err: newButton.err }
       if (this._buttons[newButton.name]) return { success: 0, err: `Button "${newButton.name}" already exists` };
       this._buttons[newButton.name] = newButton;
-      console.info(this._buttons);
-      console.log(`Saving buttons to store...`);
+      debug.info(this._buttons);
       this.saveToStore();
       return { success: 1, msg: `New Button "${newButton.name}" successfully created` }
     }
     editButton(buttonData={}) {
-      let modded = [];
+      const modded = [];
       if (!this._buttons[buttonData.name]) return { success: 0, err: `Button "${buttonData.name}" does not exist.` }
       if (this._buttons[buttonData.name].default) return { success: 0, err: `Cannot edit default buttons.` }
       this.keys.forEach(k => {
         if (buttonData[k] != null) {
-          if (k === 'default') return;
+          if (k === 'default') return; // Don't allow reassignment of 'default' property
           else if (k === 'math') {
-            let newMath = ButtonController.parseMathString(buttonData[k]);
+            const newMath = ButtonController.parseMathString(buttonData[k]);
             if (newMath.err) return newMath;
             else {
               this._buttons[buttonData.name].mathString = buttonData[k];
               this._buttons[buttonData.name].math = newMath;
               modded.push(k);
             }
-          // TODO: edit button fix goes here
-          } else {
+          }
+          else if (k === 'style') {
+            this._buttons[buttonData.name].style = styles[buttonData[k]] || buttonData[k] || '';
+            modded.push(k);
+          }
+          else {
             this._buttons[buttonData.name][k] = buttonData[k];
             modded.push(k);
           }
@@ -1372,7 +1362,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     saveToStore() {
       const customButtons = this.getButtonNames({default: false});
       customButtons.forEach(button => this._Config.toStore(`customButtons/${button}`, Helpers.copyObj(this._buttons[button])));
-      console.log(this._Config.fromStore('customButtons'));
+      // debug.log(this._Config.fromStore('customButtons'));
     }
     createApiButton(buttonName, damage, crit) {
       const btn = this._buttons[buttonName],
@@ -1380,8 +1370,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         overheal = this._Config.getSetting('overheal'),
         overkill = this._Config.getSetting('overkill');
       if (!btn || typeof(btn.math) !== 'function') {
-        console.error(`${scriptName}: error creating API button ${buttonName}`);
-        // console.error(`No button found or invalid math function"`, btn);
+        debug.error(`${scriptName}: error creating API button ${buttonName}`);
         return ``;
       }
       const modifier = btn.math(damage, crit),
@@ -1416,13 +1405,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         mathString: buttonData.mathString || buttonData.math.toString(),
         default: buttonData.default === false ? false : true,
       });
+      debug.log(this);
       if (typeof(this.math) !== 'function') return { err: `Button "${this.name}" math function failed validation` };
     }
   }
 
   class CustomButton extends Button {
     constructor(buttonData={}) {
-      console.info(buttonData);
+      debug.log(buttonData);
       if (!buttonData.math && !buttonData.mathString) return { err: `Button must contain a function in 'math' key.` };
       Object.assign(buttonData, {
         name: buttonData.name || 'newCustomButton',
@@ -1444,14 +1434,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     constructor(cliData={}) {
       this.name = cliData.name || `Cli`;
       this._locator = ServiceLocator.getLocator();
-      if (!this._locator) console.warn(`${this.constructor.name} could not find the service locator. Any commands relying on services will be disabled.`);
+      if (!this._locator) debug.warn(`${this.constructor.name} could not find the service locator. Any commands relying on services will be disabled.`);
       Object.assign(this._services, {
         config: this._locator.getService('ConfigController'),
         buttons: this._locator.getService('ButtonController'),
         cli: this,
       });
       if (cliData.options && cliData.options.length) this.addOptions(cliData.options);
-      console.info(`Initialised CLI`);
+      debug.log(`Initialised CLI`);
     }
 
     // Add one or more options to the CLI
@@ -1467,12 +1457,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
                 : service === 'ButtonController' ? this._services.buttons
                 : this._locator.getService(data.requiredServices[service]);
               if (svc) suppliedServices[service] = svc;
-              else return console.warn(`${this.name}: Warning - Service "${service}" could not be found for option ${data.name}. CLI option not registered.`);
+              else return debug.warn(`${this.name}: Warning - Service "${service}" could not be found for option ${data.name}. CLI option not registered.`);
             }
           }
           data.services = suppliedServices;
           this._options[data.name] = new CommandLineOption(data);
-        } else console.warn(`Bad data supplied to CLI Option constructor`);
+        } else debug.warn(`Bad data supplied to CLI Option constructor`);
       });
     }
 
@@ -1484,14 +1474,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         for (let option in this._options) {
           if (this._options[option].rx.test(cmd)) {
             const { msg, err } = (this._options[option].action(args) || {});
-            // console.log(msg||err);
+            // debug.log(msg||err);
             if (msg) changed.push(Helpers.toArray(msg).join('<br>'));
             if (err) errs.push(err);
           }
         }
       });
       if (changed.length && reportToChat) {
-        // console.info(changed);
+        // debug.info(changed);
         const chatData = {
           title: `${scriptName} settings changed`,
           content: changed
@@ -1537,7 +1527,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           </div>`;
       },
       table: ({ title, content, footer, borders }) => {
-        console.info(content);
+        // debug.log(content);
         const rowBorders = borders && borders.row ? styles.table.rowBorders : ``;
         const msgArray = content ? Helpers.toArray(content) : [],
           columns = msgArray[0].length || 1,
@@ -1594,7 +1584,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         this.msg = this.msg.replace(/\n/g, '');
         if (autoSend) Helpers.toChat(this.msg);
       } else {
-        console.warn(`${scriptName}: error creating chat dialog, missing template "${template}"`);
+        debug.warn(`${scriptName}: error creating chat dialog, missing template "${template}"`);
         return {};
       }
     }
