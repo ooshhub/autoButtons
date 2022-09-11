@@ -6,20 +6,22 @@ For documentation and support please visit Roll20:
 ### [autoButtons thread on Roll20](https://app.roll20.net/forum/permalink/10766392/)
 
 
-## v0.6.0 TODO:
+## v0.6.0:
 
-### Features
-#### Account for temp_hp
-- option 1: custom code, with a setting for the name of the temp_hp field
-- option 2: Keith's solution, register Aaron's tempHP script with tokenMod
+### Bugfixes:
+- Buttons were not being removed cleanly when deleted while active
+- Potential sandbox crash when buttons had corrupted math functions
+- Remove templates command wasn't working properly
+- Inbuilt styles could not be applied via editButton
 
-#### Add HP change reporting
-- toggle between GM, public, and character
 
-#### Add settings menu
+### Changes:
+- Restructured internal settings and store. Hopefully didn't break too much stuff.
 
-#### Add help menu
+### Features:
+- Settings menu is in
+- Reworked templates & properties menu options
+- Help is very slightly less unhelpful than before. It now has a link to this thread.
 
-### Bugs
-#### Fix bug with editButton()
-- editButton() needs to check the styles key when the style is changed
+### Not fixed:
+- temp_hp: use Aaron script instead, with modification
