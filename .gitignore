@@ -1,3 +1,4 @@
 test*.*
 .eslint*.*
 /dev/refactor*
+*.txt
