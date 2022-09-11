@@ -3,7 +3,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
     scriptVersion = `0.6.0`,
-    debugLevel = 3;
+    debugLevel = 2;
   let undoUninstall = null;
 
   const debug = {
@@ -27,7 +27,16 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       },
       settings: {
         // 0.6.x Setting additions
-
+        report: {
+          type: 'string',
+          range: [ 'off', 'gm', 'control', 'all' ],
+          rangeLabels: [ 'Off', 'GM', 'Character', 'Public' ],
+          validate: function(v) { return this.range.find(r => r.toLowerCase() === v.toLowerCase()) },
+          default: 'Off',
+          name: `Report changes`,
+          description: `Report hitpoint changes to chat`,
+          menuAction: `$--report`,
+        },
         //
         ...defaultScriptSettings,
       },
@@ -48,9 +57,18 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     Services.register({ serviceName: 'cli', serviceReference: CLI });
 
     // v0.6.x CLI additions
-    // CLI.addOptions([
-
-    // ]);
+    CLI.addOptions([
+      {
+        name: 'report',
+        rx: /^report/i,
+        description: `Change settings for reporting HP changes to chat`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) {
+          const newVal = `${args}`.replace(/\W/g, '').toLowerCase();
+          return this.config.changeSetting('report', newVal);
+        }
+      },
+    ]);
     //
 
     // Check install and version
@@ -77,13 +95,20 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (v < `0.5.0`) { // major refactor - move buttons over to new button store
           Helpers.copyOldButtonStore();
           state[scriptName].settings.bump = state[scriptName].settings.bump || true;
-					state[scriptName].settings.targetTokens = state[scriptName].settings.targetTokens || false;
+          state[scriptName].settings.targetTokens = state[scriptName].settings.targetTokens || false;
         }
         if (v < `0.6.0`) {
           // Remove the old buttons store
           if (state[scriptName].settings.buttons && state[scriptName].store) delete state[scriptName].settings.buttons;
+          // Update template property structure
+          if (state[scriptName].settings.templates.damageProperties.damage && !state[scriptName].settings.templates.damageProperties.damageFields) {
+            state[scriptName].settings.templates.damageProperties.damageFields = state[scriptName].settings.templates.damageProperties.damage;
+            delete state[scriptName].settings.templates.damageProperties.damage;
+            state[scriptName].settings.templates.damageProperties.critFields = state[scriptName].settings.templates.damageProperties.crit;
+            delete state[scriptName].settings.templates.damageProperties.crit;
+          }
         }
-        state[scriptName].version = Config.version;
+        // state[scriptName].version = Config.version;
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
       }
       Config.fetchFromState();
@@ -249,6 +274,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         return `!autobut?{Are you sure you wish to ${confirmAction}|Yes,&nbsp;|No,fffff}`;
       },
     },
+    report: ``,
     // BUMP setting CSS - if Roll20 dick with the chatbar CSS this will need to be updated
     mods: {
       bump: `left: -5px; top: -30px; margin-bottom: -34px;`
@@ -767,7 +793,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'help',
       rx: /^(\?$|h$|help)/i,
       description: `Display script help`,
-      action: function() { new ChatDialog({ title: `Script Help`, content: `Not yet implemented.` }) }
+      action: function() { new ChatDialog({ title: `Script Help`, content: `Please visit the <a href="https://app.roll20.net/forum/permalink/10766392/" style="color:#6bb75d!important; font-weight: bold;">autoButtons thread</a> for documentation.` }) }
     },
     {
       name: 'uninstall',
@@ -802,6 +828,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     sheet: {
       type: 'string',
       range: ['dnd5e_r20', 'custom'],
+      rangeLabels: [ 'DnD5e by Roll20', 'Custom' ],
       validate: function(v) { return this.range.includes(v) },
       default: 'dnd5e_r20',
       name: 'Character sheet',
@@ -1129,7 +1156,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             else {
               const queryRange =
                 currentObject[key].type === 'boolean' ? ['True', 'False']
-                : currentObject[key].range ? Helpers.toArray(currentObject[key].range)
+                : currentObject[key].range ?
+                  currentObject[key].rangeLabels ? currentObject[key].range.map((v,i) => `${currentObject[key].rangeLabels[i]||v},${v}`)
+                  : Helpers.toArray(currentObject[key].range)
                 : '',
                 queryString = queryRange ? `?{Select new value|${queryRange.join('|')}}` : `?{Enter new value}`,
                 cliFlag = (`${currentObject[key].menuAction}`.match(/^\$(.+)/)||[])[1] || `--${key}`,
@@ -1364,11 +1393,23 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       customButtons.forEach(button => this._Config.toStore(`customButtons/${button}`, Helpers.copyObj(this._buttons[button])));
       // debug.log(this._Config.fromStore('customButtons'));
     }
+    _getReportTemplate() {
+      const template = `'*({name}) {bar1_value;before}HP -> {bar1_value}HP*'`;
+      return template;
+      // Styled report template for if Aaron implements decoding in TM
+      // const templateRaw = `'<div class="autobuttons-tm-report" style="${styles.report}">{name}: {bar1_value:before}HP >> {bar1_value}HP</div>'`;
+      // return encodeURIComponent(templateRaw);
+    }
     createApiButton(buttonName, damage, crit) {
       const btn = this._buttons[buttonName],
         bar = this._Config.getSetting('hpBar'),
         overheal = this._Config.getSetting('overheal'),
-        overkill = this._Config.getSetting('overkill');
+        overkill = this._Config.getSetting('overkill'),
+        sendReport = (this._Config.getSetting('report')||``).toLowerCase(),
+        reportString = [ 'all', 'gm', 'control' ].includes(sendReport)
+          ? ` --report ${sendReport}|${this._getReportTemplate()}`
+          : ``;
+        console.info(reportString);
       if (!btn || typeof(btn.math) !== 'function') {
         debug.error(`${scriptName}: error creating API button ${buttonName}`);
         return ``;
@@ -1377,7 +1418,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
         tokenModCmd = (modifier > 0) ? (!overheal) ? `+${modifier}!` : `+${modifier}` : (modifier < 0 && !overkill) ? `${modifier}!` : modifier,
         selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``;
-      return `<div style="${styles.buttonContainer}"  title="${tooltip}"><a href="!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}" style="${styles.buttonShared}${btn.style}">${btn.content}</a></div>`;
+      return `<div style="${styles.buttonContainer}"  title="${tooltip}"><a href="!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}" style="${styles.buttonShared}${btn.style}">${btn.content}</a></div>`;
     }
     verifyButtons() {
       const currentSheet = this._Config.getSetting('sheet'),
