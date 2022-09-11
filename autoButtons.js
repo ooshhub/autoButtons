@@ -1409,7 +1409,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         reportString = [ 'all', 'gm', 'control' ].includes(sendReport)
           ? ` --report ${sendReport}|${this._getReportTemplate()}`
           : ``;
-        console.info(reportString);
+        // console.info(reportString);
       if (!btn || typeof(btn.math) !== 'function') {
         debug.error(`${scriptName}: error creating API button ${buttonName}`);
         return ``;
