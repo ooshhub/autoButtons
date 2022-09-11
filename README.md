@@ -22,6 +22,7 @@ For documentation and support please visit Roll20:
 - Settings menu is in
 - Reworked templates & properties menu options
 - Help is very slightly less unhelpful than before. It now has a link to this thread.
+- Reporting is in.
 
 ### Not fixed:
 - temp_hp: use Aaron script instead, with modification
