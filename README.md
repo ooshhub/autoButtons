@@ -6,7 +6,7 @@ For documentation and support please visit Roll20:
 ### [autoButtons thread on Roll20](https://app.roll20.net/forum/permalink/10766392/)
 
 
-## v0.6.0:
+## v0.6.1:
 
 ### Bugfixes:
 - Buttons were not being removed cleanly when deleted while active
@@ -17,6 +17,7 @@ For documentation and support please visit Roll20:
 
 ### Changes:
 - Restructured internal settings and store. Hopefully didn't break too much stuff.
+- If detected config will result in no autoButtons functionality (e.g. no templates being watched or no buttons enabled), the script will no longer automatically reload settings, but will prompt the user. This prevents config loss if the sandbox is reset partway through setting up a custom sheet
 
 ### Features:
 - Settings menu is in
