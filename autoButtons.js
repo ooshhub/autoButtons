@@ -2,7 +2,7 @@
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.6.0`,
+    scriptVersion = `0.6.1`,
     debugLevel = 2;
   let undoUninstall = null;
 
@@ -116,8 +116,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
         (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
           // debug.log(`Loading preset...`);
-          Config.loadPreset();
-          if (!firstTimeSetup) new ChatDialog({ title: `${scriptName} Install`, content:`Error fetching Config - loaded preset defaults` }, 'error');
+          if (firstTimeSetup) Config.loadPreset();
+          else new ChatDialog({ title: `${scriptName} Install`, content:`No roll templates registered, or no buttons enabled. AutoButtons will not currently do anything. If you're still setting things up, this is probably ok, otherwise you may want to <a href="${styles.components.confirmApiCommand('reset sheet settings')} --reset" style="${styles.list.controls.create}">Reset</a> to default sheet settings.` }, 'error');
       }
       // Check state of buttons, repair if needed
       if (!state[scriptName].store) Helpers.copyOldButtonStore();
