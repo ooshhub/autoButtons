@@ -108,7 +108,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             delete state[scriptName].settings.templates.damageProperties.crit;
           }
         }
-        // state[scriptName].version = Config.version;
+        state[scriptName].version = Config.version;
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
       }
       Config.fetchFromState();
