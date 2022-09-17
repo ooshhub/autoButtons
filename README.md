@@ -6,9 +6,10 @@ For documentation and support please visit Roll20:
 ### [autoButtons thread on Roll20](https://app.roll20.net/forum/permalink/10766392/)
 
 
-## v0.6.1:
+## v0.6.2:
 
 ### Bugfixes:
+- Removed hard-coded bar number from reporting template, preventing HP bar from changing from 1
 - Buttons were not being removed cleanly when deleted while active
 - Potential sandbox crash when buttons had corrupted math functions
 - Remove templates command wasn't working properly
