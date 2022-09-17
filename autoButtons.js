@@ -2,7 +2,7 @@
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.6.1`,
+    scriptVersion = `0.6.2`,
     debugLevel = 2;
   let undoUninstall = null;
 
@@ -1393,8 +1393,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       customButtons.forEach(button => this._Config.toStore(`customButtons/${button}`, Helpers.copyObj(this._buttons[button])));
       // debug.log(this._Config.fromStore('customButtons'));
     }
-    _getReportTemplate() {
-      const template = `'*({name}) {bar1_value;before}HP -> {bar1_value}HP*'`;
+    _getReportTemplate(barNumber) {
+      const template = `'*({name}) {bar${barNumber}_value;before}HP -> {bar${barNumber}_value}HP*'`;
       return template;
       // Styled report template for if Aaron implements decoding in TM
       // const templateRaw = `'<div class="autobuttons-tm-report" style="${styles.report}">{name}: {bar1_value:before}HP >> {bar1_value}HP</div>'`;
@@ -1407,7 +1407,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         overkill = this._Config.getSetting('overkill'),
         sendReport = (this._Config.getSetting('report')||``).toLowerCase(),
         reportString = [ 'all', 'gm', 'control' ].includes(sendReport)
-          ? ` --report ${sendReport}|${this._getReportTemplate()}`
+          ? ` --report ${sendReport}|${this._getReportTemplate(bar)}`
           : ``;
         console.info(reportString);
       if (!btn || typeof(btn.math) !== 'function') {
