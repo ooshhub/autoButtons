@@ -832,8 +832,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           delete state[scriptName];
           new ChatDialog({
             header: `${scriptName} uninstalled!`,
-            body: `Removed all ${scriptName} settings from API state. Click the 'whoopsie' button below if you didn't mean to destroy all your settings! All settings will be *permantently* lost on sandbox restart.`,
-            footer: `<a style="${styles.list.controls.create}" href="!autobut --uninstall undo">Oh Shit!</a>`,
+            body: `Removed all ${scriptName} settings from API state. Click the 'whoopsie' button below if you didn't mean to destroy all your settings!<br>Otherwise, all settings will be *permantently* lost on sandbox restart.`,
+            footer: `<a style="${styles.list.controls.create}" href="!autobut --uninstall undo">Restore!</a>`,
           }, 'listButtons');
         }
       }
@@ -1447,7 +1447,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
       const modifier = btn.math(damage, crit),
         tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
-        setWithQuery = btn.query ? `&lsqb;&lsqb;${btn.query.replace(/%%MODIFIER%%/g, Math.abs(modifier))}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
+        setWithQuery = btn.query ? `${btn.query.replace(/%%MODIFIER%%/g, Math.abs(modifier))}` : `${Math.abs(modifier)}`,
         tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
         selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``;
       return (autoHide && modifier == 0) ?
