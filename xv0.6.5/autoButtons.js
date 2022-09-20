@@ -1,4 +1,10 @@
 /* globals state log on sendChat playerIsGM */ //eslint-disable-line
+
+
+// !autobut --createbutton {{name=damageResistPct}} {{math=-(damage.total)}} {{query=*|Damage Resistance multiplier?|0}} {{content=DR*}} {{tooltip=Custom DR* (%)}} {{style=font-family:sans-serif; font-weight: bold; color: darkblue;}}
+// !autobut --createbutton {{name=damageResistInt}} {{math=-(damage.total)}} {{query=-|Damage Resistance amount?|0}} {{content=DR-}} {{tooltip=Custom DR- (%)}} {{style=font-family:sans-serif; font-weight: bold; color: darkblue;}}
+// !token-mod --set bar1_value|-[[15-?{Damage Resistance amount?|0}]]!
+
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
@@ -1429,6 +1435,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       // return encodeURIComponent(templateRaw);
 
       // !token-mod --set bar1_value|-[[floor(query*17)]]!
+      
     }
     createApiButton(buttonName, damage, crit) {
       const btn = this._buttons[buttonName],
