@@ -3,7 +3,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
     scriptVersion = `0.6.5`,
-    debugLevel = 4;
+    debugLevel = 2;
   let undoUninstall = null;
 
   const debug = {
@@ -1427,6 +1427,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       // Styled report template for if Aaron implements decoding in TM
       // const templateRaw = `'<div class="autobuttons-tm-report" style="${styles.report}">{name}: {bar1_value:before}HP >> {bar1_value}HP</div>'`;
       // return encodeURIComponent(templateRaw);
+
+      // !token-mod --set bar1_value|-[[floor(query*17)]]!
     }
     createApiButton(buttonName, damage, crit) {
       const btn = this._buttons[buttonName],
@@ -1445,7 +1447,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
       const modifier = btn.math(damage, crit),
         tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
-        setWithQuery = btn.query ? `&lsqb;&lsqb;${Math.abs(modifier)} ${btn.query}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
+        setWithQuery = btn.query ? `&lsqb;&lsqb;${btn.query.replace(/%%MODIFIER%%/g, Math.abs(modifier))}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
         tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
         selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``;
       return (autoHide && modifier == 0) ?
@@ -1489,15 +1491,24 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         '*': `&ast;`,
         '+': `&plus;`,
         // '-': `&hyphen;`,
-        '/': `&sol;`
+        // '/': `&sol;`
       }
       const replacerFunction = (m) => replacers[m],
-        rxQuerySplit = /^(\*|\+|-|\/)\|/,
+        rxQuerySplit = /^[+*/-][+-]?\|/,
         rxReplacers = new RegExp(`[${Object.keys(replacers).reduce((out,v) => out += `\\${v}`, ``)}]`, 'g');
-      let operator = (queryString.match(rxQuerySplit)||[])[1] || ``,
-        query = queryString.replace(rxQuerySplit, '');
-      operator = operator.replace(rxReplacers, replacerFunction);
-      return query ? `${operator}&quest;&lcub;${query}&rcub;` : ``;
+      let operator = (queryString.match(rxQuerySplit)||[])[0] || ``,
+        query = queryString.replace(rxQuerySplit, ''),
+        roundingPre = ``,
+        roundingPost = ``;
+      // Deal with rounding
+      if (/^[*/]/.test(operator)) {
+        roundingPre = operator[1] === '+' ?
+          `ceil(`
+          : `floor(`
+        roundingPost = `)`;
+      }
+      operator = (operator[0]||``).replace(rxReplacers, replacerFunction);
+      return query ? `&lsqb;&lsqb;${roundingPre}%%MODIFIER%%${operator}&quest;&lcub;${query}&rcub;${roundingPost}&rsqb;&rsqb;` : ``;
     }
   }
 
