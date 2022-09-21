@@ -1,9 +1,15 @@
 /* globals state log on sendChat playerIsGM */ //eslint-disable-line
+
+
+// !autobut --createbutton {{name=drPercent}} {{math=-(damage.total)}} {{query=*|Damage Resistance multiplier? (%%MODIFIER%% damage)|0}} {{content=DR&percnt;}} {{tooltip=Damage Resist &percnt; (%)}} {{style=font-family:sans-serif; font-weight: bold; color: darkblue; font-size: 0.9em;}}
+// !autobut --createbutton {{name=drFlat}} {{math=-(damage.total)}} {{query=-|Damage Resistance amount? (%%MODIFIER%% damage)|0}} {{content=DR+}} {{tooltip=Damage Resist flat (%)}} {{style=font-family:sans-serif; font-weight: bold; color: darkblue; font-size: 0.9em;}}
+// !token-mod --set bar1_value|-[[15-?{Damage Resistance amount?|0}]]!
+
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
     scriptVersion = `0.6.5`,
-    debugLevel = 4;
+    debugLevel = 2;
   let undoUninstall = null;
 
   const debug = {
@@ -27,6 +33,20 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       },
       settings: {
         // 0.6.x Setting additions
+        allowNegatives: {
+          type: 'boolean',
+          default: false,
+          name: `Allow negatives`,
+          description: `Allow final results to be negative<br>This can cause healing to cause damage or <br>damage to heal`,
+          menuAction: `$--negatives`,
+        },
+        autosort: {
+          type: 'boolean',
+          default: false,
+          name: `Sort buttons`,
+          description: `Auto sort buttons by unicode order`,
+          menuAction: `$--autosort`,
+        },
         autohide: {
           type: 'boolean',
           default: true,
@@ -65,6 +85,20 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
     // v0.6.x CLI additions
     CLI.addOptions([
+      {
+        name: 'allowNegatives',
+        rx: /^negative/i,
+        description: `Allow final results to be negative`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) { return this.config.changeSetting('allowNegatives', args) }
+      },
+      {
+        name: 'autosort',
+        rx: /^autosort/i,
+        description: `Auto sort buttons by unicode order`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) { return this.config.changeSetting('autosort', args) }
+      },
       {
         name: 'autohide',
         rx: /^autohide/i,
@@ -159,12 +193,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       let activeButtons = Config.getSetting(`enabledButtons`) || [],
         name = Helpers.findName(msg.content);
       name = name || `Apply:`;
-      const buttonArray = activeButtons.map(btn => ButtonStore.createApiButton(btn, damage, crit)).filter(v=>v);
-      if (buttonArray.length < 1) {
+      const buttonArray = Config.getSetting('autosort') ? activeButtons.sort((a,b) => a.name > b.name ? 1 : -1) : activeButtons;
+      const htmlArray = buttonArray.map(btn => ButtonStore.createApiButton(btn, damage, crit)).filter(v=>v);
+      if (htmlArray.length < 1) {
         debug.info(`No valid buttons were returned`);
         return;
       }
-      const buttonHtml = buttonArray.join('');
+      const buttonHtml = htmlArray.join('');
       const buttonTemplate = `<div class="autobutton" style="${styles.outer}${Config.getSetting('bump') ? styles.mods.bump : ''}}"><div style="${styles.rollName}">${name}</div>${buttonHtml}</div>`;
       Helpers.toChat(`${buttonTemplate}`, gmOnly);
     }
@@ -744,7 +779,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           buttonData.default = false;
           // construct query if provided
           if (buttonData.query) buttonData.query = Button.splitAndEscapeQuery(buttonData.query);
-          return this.buttons.addButton(buttonData);
+          const result = this.buttons.addButton(buttonData);
+          if (result.success) {
+            this.buttons.showButton(buttonName);
+            return result;
+          } 
         } else return { err: `Bad input for button creation` }
       }
     },
@@ -832,8 +871,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           delete state[scriptName];
           new ChatDialog({
             header: `${scriptName} uninstalled!`,
-            body: `Removed all ${scriptName} settings from API state. Click the 'whoopsie' button below if you didn't mean to destroy all your settings! All settings will be *permantently* lost on sandbox restart.`,
-            footer: `<a style="${styles.list.controls.create}" href="!autobut --uninstall undo">Oh Shit!</a>`,
+            body: `Removed all ${scriptName} settings from API state. Click the 'whoopsie' button below if you didn't mean to destroy all your settings!<br>Otherwise, all settings will be *permantently* lost on sandbox restart.`,
+            footer: `<a style="${styles.list.controls.create}" href="!autobut --uninstall undo">Restore!</a>`,
           }, 'listButtons');
         }
       }
@@ -1427,6 +1466,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       // Styled report template for if Aaron implements decoding in TM
       // const templateRaw = `'<div class="autobuttons-tm-report" style="${styles.report}">{name}: {bar1_value:before}HP >> {bar1_value}HP</div>'`;
       // return encodeURIComponent(templateRaw);
+
+      // !token-mod --set bar1_value|-[[floor(query*17)]]!
+      
     }
     createApiButton(buttonName, damage, crit) {
       const btn = this._buttons[buttonName],
@@ -1438,14 +1480,17 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         reportString = [ 'all', 'gm', 'control' ].includes(sendReport)
           ? ` --report ${sendReport}|${this._getReportTemplate(bar)}`
           : ``;
-        debug.info(reportString);
+      const zeroBound = this._Config.getSetting('allowNegatives') ? false : true,
+        boundingPre = zeroBound ? `{0, ` : ``,
+        boundingPost = zeroBound ? `}kh1` : ``;
+      // debug.info(reportString);
       if (!btn || typeof(btn.math) !== 'function') {
         debug.error(`${scriptName}: error creating API button ${buttonName}`);
         return ``;
       }
       const modifier = btn.math(damage, crit),
         tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
-        setWithQuery = btn.query ? `&lsqb;&lsqb;${Math.abs(modifier)} ${btn.query}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
+        setWithQuery = btn.query ? `&lsqb;&lsqb;${boundingPre}${btn.query.replace(/%%MODIFIER%%/g, Math.abs(modifier))}${boundingPost}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
         tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
         selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``;
       return (autoHide && modifier == 0) ?
@@ -1488,16 +1533,23 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const replacers = {
         '*': `&ast;`,
         '+': `&plus;`,
-        // '-': `&hyphen;`,
-        '/': `&sol;`
       }
       const replacerFunction = (m) => replacers[m],
-        rxQuerySplit = /^(\*|\+|-|\/)\|/,
+        rxQuerySplit = /^[+*/-][+-0]?\|/,
         rxReplacers = new RegExp(`[${Object.keys(replacers).reduce((out,v) => out += `\\${v}`, ``)}]`, 'g');
-      let operator = (queryString.match(rxQuerySplit)||[])[1] || ``,
-        query = queryString.replace(rxQuerySplit, '');
-      operator = operator.replace(rxReplacers, replacerFunction);
-      return query ? `${operator}&quest;&lcub;${query}&rcub;` : ``;
+      let operator = (queryString.match(rxQuerySplit)||[])[0] || ``,
+        query = queryString.replace(rxQuerySplit, ''),
+        roundingPre = ``,
+        roundingPost = ``;
+      // Deal with rounding for * /
+      if (/^[*/]/.test(operator)) {
+        roundingPre = operator[1] === '+' ?
+          `ceil(`
+          : `floor(`
+        roundingPost = `)`;
+      }
+      operator = (operator[0]||``).replace(rxReplacers, replacerFunction);
+      return query ? `${roundingPre}%%MODIFIER%%${operator}&quest;&lcub;${query}&rcub;${roundingPost}` : ``;
     }
   }
 
