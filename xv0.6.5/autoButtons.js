@@ -37,7 +37,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           type: 'boolean',
           default: false,
           name: `Allow negatives`,
-          description: `Allow final results to be negative<br>This can cause healing to cause damage or <br>damage to heal`,
+          description: `Allow final results to be negative. This can cause healing to cause damage, or damage to heal`,
           menuAction: `$--negatives`,
         },
         autosort: {
