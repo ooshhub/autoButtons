@@ -1,10 +1,5 @@
 /* globals state log on sendChat playerIsGM */ //eslint-disable-line
 
-
-// !autobut --createbutton {{name=drPercent}} {{math=-(damage.total)}} {{query=*|Damage Resistance multiplier? (%%MODIFIER%% damage)|0}} {{content=DR&percnt;}} {{tooltip=Damage Resist &percnt; (%)}} {{style=font-family:sans-serif; font-weight: bold; color: darkblue; font-size: 0.9em;}}
-// !autobut --createbutton {{name=drFlat}} {{math=-(damage.total)}} {{query=-|Damage Resistance amount? (%%MODIFIER%% damage)|0}} {{content=DR+}} {{tooltip=Damage Resist flat (%)}} {{style=font-family:sans-serif; font-weight: bold; color: darkblue; font-size: 0.9em;}}
-// !token-mod --set bar1_value|-[[15-?{Damage Resistance amount?|0}]]!
-
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
@@ -50,7 +45,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         autohide: {
           type: 'boolean',
           default: true,
-          name: `Hide null buttons`,
+          name: `Autohide buttons`,
           description: `Autohide buttons with 0 reported damage`,
           menuAction: `$--autohide`,
         },
