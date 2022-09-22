@@ -210,8 +210,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (isSpell) {
           const upcastDamageFields = Config.getSetting('templates/damageProperties/upcastDamage')||[],
             upcastCritFields = Config.getSetting('templates/damageProperties/upcastCrit')||[];
-          damage.total += Helpers.processFields(upcastDamageFields, msg).total||0;
-          crit.total += Helpers.processFields(upcastCritFields, msg).total||0;
+          const upcastDamage = Helpers.processFields(upcastDamageFields, msg),
+            upcastCrit = Helpers.processFields(upcastCritFields, msg);
+          Helpers.mergeDamageObjects(damage, upcastDamage);
+          Helpers.mergeDamageObjects(crit, upcastCrit);
         }
       }
       sendButtons(damage, crit, msg);
@@ -362,6 +364,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       math: (damage) => (damage.total),
       content: '&',
     },
+    // Buttons added in 0.6.x
   };
 
   // Global regex
@@ -404,7 +407,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       let words = inpString.split(/\s+/g);
       return words.map(w => `${w[0].toUpperCase()}${w.slice(1)}`).join(` `);
     }
-    // Split {{handlebars=moustache}} notation to key value
+    // Split {{handlebars=moustache}} notation to key:value
     static splitHandlebars(inputString) {
       let output = {},
         kvArray = inputString.match(/{{[^}]+}}/g)||[];
@@ -426,7 +429,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         return `${wPre}${wSuf}`;
       }).join('');
     }
-
+    /**
+     * Check if an object is a basic JS object
+     * @param {any} input 
+     * @returns {bool}
+     */
     static isObj(input) { return (typeof(input) === 'object' && input.constructor.name === 'Object') ? true : false }
 
     static copyObj(inputObj) { return (typeof inputObj !== 'object') ? null : JSON.parse(JSON.stringify(inputObj)); }
@@ -484,6 +491,25 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         names.push(state[scriptName].store.customButtons[button].name);
       }
       if (names.length) new ChatDialog({ title: 'Buttons copied to new version', content: names });
+    }
+
+    /**
+     * Recalculate the total key in a damage object
+     * @param {object} damageObject 
+     */
+
+    static recalculateDamageTotal(damageObject) {
+      damageObject.total = 0;
+      for (const key in damageObject) damageObject.total += key === 'total' ? 0 : damageObject[key];
+    }
+    /**
+     * Merge two damage objects together and recalculate total
+     * @param {object} baseObject 
+     * @param {object} addObject 
+     */
+    static mergeDamageObjects(baseObject, addObject) {
+      Object.assign(baseObject, addObject);
+      Helpers.recalculateDamageTotal(baseObject);
     }
   }
 
