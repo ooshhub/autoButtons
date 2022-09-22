@@ -1,9 +1,9 @@
-/* globals state log on sendChat playerIsGM */ //eslint-disable-line
+/* globals state log on sendChat playerIsGM findObjs */ //eslint-disable-line
 
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.6.5`,
+    scriptVersion = `0.6.6`,
     debugLevel = 2;
   let undoUninstall = null;
 
@@ -28,6 +28,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       },
       settings: {
         // 0.6.x Setting additions
+        multiattack: {
+          type: 'boolean',
+          default: false,
+          name: `Multiattack`,
+          description: `Attempt to link the button bar label to the source attack for easy repeat rolls. 5e only.`,
+          menuAction: `$--multiattack`,
+        },
         allowNegatives: {
           type: 'boolean',
           default: false,
@@ -80,6 +87,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
     // v0.6.x CLI additions
     CLI.addOptions([
+      {
+        name: 'multiattack',
+        rx: /^multiat/i,
+        description: `Attempt to link the button bar label to the source attack for easy repeat rolls`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) { return this.config.changeSetting('multiattack', args) }
+      },
       {
         name: 'allowNegatives',
         rx: /^negative/i,
@@ -184,18 +198,20 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     
     // Send buttons to chat
     const sendButtons = (damage, crit, msg) => {
-      const gmOnly = Config.getSetting('gmOnly') ? true : false;
-      let activeButtons = Config.getSetting(`enabledButtons`) || [],
-        name = Helpers.findName(msg.content);
-      name = name || `Apply:`;
-      const buttonArray = Config.getSetting('autosort') ? activeButtons.sort((a,b) => a.name > b.name ? 1 : -1) : activeButtons;
-      const htmlArray = buttonArray.map(btn => ButtonStore.createApiButton(btn, damage, crit)).filter(v=>v);
+      const gmOnly = Config.getSetting('gmOnly') ? true : false,
+        activeButtons = Config.getSetting(`enabledButtons`) || [],
+        name = Helpers.findName(msg.content),
+        buttonArray = Config.getSetting('autosort') ? activeButtons.sort((a,b) => a.name > b.name ? 1 : -1) : activeButtons,
+        htmlArray = buttonArray.map(btn => ButtonStore.createApiButton(btn, damage, crit)).filter(v=>v);
+      let sourceAttackAbility;
+      if (Config.getSetting('multiattack')) sourceAttackAbility = Helpers5e.findNpcAttack(msg, name);
+      const buttonBarLabel = sourceAttackAbility ? `<div style="${styles.rollName}"><a href="&grave;${sourceAttackAbility}" style="${styles.rollName}">${name}</a></div>` : `<div style="${styles.rollName}">${name}</div>`;
       if (htmlArray.length < 1) {
         debug.info(`No valid buttons were returned`);
         return;
       }
       const buttonHtml = htmlArray.join('');
-      const buttonTemplate = `<div class="autobutton" style="${styles.outer}${Config.getSetting('bump') ? styles.mods.bump : ''}}"><div style="${styles.rollName}">${name}</div>${buttonHtml}</div>`;
+      const buttonTemplate = `<div class="autobutton" style="${styles.outer}${Config.getSetting('bump') ? styles.mods.bump : ''}}">${buttonBarLabel}${buttonHtml}</div>`;
       Helpers.toChat(`${buttonTemplate}`, gmOnly);
     }
 
@@ -393,9 +409,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
     // Simple name finder, provided rolltemplate has some kind of 'name' property
     static findName(msgContent) {
-      const rxName = /name=([^}]+)}/i;
-      let name = msgContent.match(rxName);
-      return name ? name[1] : null;
+      const rxRname = /{rname=(.+?)}}/i;
+      const rxName = /{name=(.+?)}}/i;
+      let name = msgContent.match(rxRname) || msgContent.match(rxName);
+      return name ? name[1] : 'Apply:';
     }
     // sendChat shortcut
     static toChat(msg, whisper = true) {
@@ -519,6 +536,34 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     static is5eAttackSpell(msgContent) {
       const rxSpell = /{spelllevel=(cantrip|\d+)/;
       return rxSpell.test(msgContent) ? 1 : 0;
+    }
+    /**
+     * Find a repeating_npcaction attack from the roll template content. Optionally supply the attack name.
+     * @param {Object} msg - r20 message object
+     * @param {string} [attackName] - name of the attack 
+     * @returns {?string} - content of @{rollbase} in the target attack
+     */
+    static findNpcAttack = (msg, attackName) => {
+      if (!msg.rolltemplate || !/^npc/.test(msg.rolltemplate)) return;
+      const rx = {
+        attackName: /rname=(.+?)}}/,
+        characterName: /{{name=(.+?)}}/,
+        attackNameAttribute: /^repeating_npcaction_(-[0-z-]{19})_name/i,
+      };
+      attackName = attackName || (msg.content.match(rx.attackName)||[])[1];
+      const characterName = (msg.content.match(rx.characterName)||[])[1],
+        char = findObjs({ type: 'character', name: characterName })[0];
+      if (!char || !attackName) return null;
+      const attackRowId = findObjs({ type: 'attribute', characterid: char.id }).reduce((out, attribute) => {
+        if (attribute.get('current') === attackName) {
+          const rowMatch = attribute.get('name').match(rx.attackNameAttribute);
+          if (rowMatch) return rowMatch[1];
+        }
+        return out;
+      }, ``);
+      return attackRowId ? `&commat;&lcub;${characterName}|repeating_npcaction_${attackRowId}_rollbase&rcub;` : null;
+      // const targetRollAttribute = findObjs({ type: 'attribute', characterid: char.id, name: `repeating_npcaction_${attackRowId}_rollbase` })[0];
+      // if (targetRollAttribute) return targetRollAttribute.get('current');
     }
   }
 
