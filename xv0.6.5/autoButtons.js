@@ -1,10 +1,5 @@
 /* globals state log on sendChat playerIsGM */ //eslint-disable-line
 
-
-// !autobut --createbutton {{name=drPercent}} {{math=-(damage.total)}} {{query=*|Damage Resistance multiplier? (%%MODIFIER%% damage)|0}} {{content=DR&percnt;}} {{tooltip=Damage Resist &percnt; (%)}} {{style=font-family:sans-serif; font-weight: bold; color: darkblue; font-size: 0.9em;}}
-// !autobut --createbutton {{name=drFlat}} {{math=-(damage.total)}} {{query=-|Damage Resistance amount? (%%MODIFIER%% damage)|0}} {{content=DR+}} {{tooltip=Damage Resist flat (%)}} {{style=font-family:sans-serif; font-weight: bold; color: darkblue; font-size: 0.9em;}}
-// !token-mod --set bar1_value|-[[15-?{Damage Resistance amount?|0}]]!
-
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
@@ -50,7 +45,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         autohide: {
           type: 'boolean',
           default: true,
-          name: `Hide null buttons`,
+          name: `Autohide buttons`,
           description: `Autohide buttons with 0 reported damage`,
           menuAction: `$--autohide`,
         },
@@ -215,8 +210,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (isSpell) {
           const upcastDamageFields = Config.getSetting('templates/damageProperties/upcastDamage')||[],
             upcastCritFields = Config.getSetting('templates/damageProperties/upcastCrit')||[];
-          damage.total += Helpers.processFields(upcastDamageFields, msg).total||0;
-          crit.total += Helpers.processFields(upcastCritFields, msg).total||0;
+          const upcastDamage = Helpers.processFields(upcastDamageFields, msg),
+            upcastCrit = Helpers.processFields(upcastCritFields, msg);
+          Helpers.mergeDamageObjects(damage, upcastDamage);
+          Helpers.mergeDamageObjects(crit, upcastCrit);
         }
       }
       sendButtons(damage, crit, msg);
@@ -367,6 +364,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       math: (damage) => (damage.total),
       content: '&',
     },
+    // Buttons added in 0.6.x
   };
 
   // Global regex
@@ -409,7 +407,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       let words = inpString.split(/\s+/g);
       return words.map(w => `${w[0].toUpperCase()}${w.slice(1)}`).join(` `);
     }
-    // Split {{handlebars=moustache}} notation to key value
+    // Split {{handlebars=moustache}} notation to key:value
     static splitHandlebars(inputString) {
       let output = {},
         kvArray = inputString.match(/{{[^}]+}}/g)||[];
@@ -431,7 +429,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         return `${wPre}${wSuf}`;
       }).join('');
     }
-
+    /**
+     * Check if an object is a basic JS object
+     * @param {any} input 
+     * @returns {bool}
+     */
     static isObj(input) { return (typeof(input) === 'object' && input.constructor.name === 'Object') ? true : false }
 
     static copyObj(inputObj) { return (typeof inputObj !== 'object') ? null : JSON.parse(JSON.stringify(inputObj)); }
@@ -489,6 +491,25 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         names.push(state[scriptName].store.customButtons[button].name);
       }
       if (names.length) new ChatDialog({ title: 'Buttons copied to new version', content: names });
+    }
+
+    /**
+     * Recalculate the total key in a damage object
+     * @param {object} damageObject 
+     */
+
+    static recalculateDamageTotal(damageObject) {
+      damageObject.total = 0;
+      for (const key in damageObject) damageObject.total += key === 'total' ? 0 : damageObject[key];
+    }
+    /**
+     * Merge two damage objects together and recalculate total
+     * @param {object} baseObject 
+     * @param {object} addObject 
+     */
+    static mergeDamageObjects(baseObject, addObject) {
+      Object.assign(baseObject, addObject);
+      Helpers.recalculateDamageTotal(baseObject);
     }
   }
 
