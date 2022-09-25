@@ -1,5 +1,8 @@
 /* globals state log on sendChat playerIsGM findObjs */ //eslint-disable-line
 
+// !autobut --createbutton {{name=Primary}} {{math=-(damage.dmg1 + damage.globaldamage + damage.hldmg)}} {{content=k}} {{content2=1}} {{style=color: darkred; font-size: 2.8rem; line-height: 2.4rem;}} {{style2=font-family: sans-serif; font-size: 1.5rem; font-weight: bold; color: whitesmoke;}} {{tooltip=Primary (%)}}
+// !autobut --createbutton {{name=Secondary}} {{math=-(damage.dmg2 + damage.globaldamage + damage.hldmg)}} {{content=k}} {{content2=2}} {{style=color: darkred; font-size: 2.8rem; line-height: 2.4rem;}} {{style2=font-family: sans-serif; font-size: 1.5rem; font-weight: bold; color: whitesmoke;}} {{tooltip=Primary (%)}}
+
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
@@ -296,11 +299,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     error: `color: red; font-weight: bold;`,
     outer: `position: relative; vertical-align: middle; font-family: pictos; display: block; background: #f4e6b6; border: 1px solid black; height: auto; line-height: 34px; text-align: center; border-radius: 2px;`,
     rollName: `font-family: arial; font-size: 1.1rem; color: black; font-style:italic; position:relative; overflow: hidden; display: block; line-height: 1rem; margin: 2px 0px 1px 0px; white-space: nowrap; text-align: left; left: 2px;`,
-    buttonContainer: `display: inline-block; text-align: center; vertical-align: middle; line-height: 26px; margin: auto 5px auto 5px; height: 26px;	width: 26px; border: #8c6700 1px solid;	box-shadow: 0px 0px 3px #805200; border-radius: 5px; background-color: whitesmoke;`,
-    buttonShared: `background-color: transparent;	border: none;	padding: 0px;	width: 100%; height: 100%; overflow: hidden;	white-space: nowrap;`,
+    buttonContainer: `display: inline-block; text-align: center; vertical-align: middle; line-height: 26px; margin: auto 5px auto 5px; height: 26px;	width: 26px; border: #8c6700 1px solid;	box-shadow: 0px 0px 3px #805200; border-radius: 5px; background-color: whitesmoke; position: relative;`,
+    buttonShared: `background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; width: 100%; height: 100%; overflow: hidden;	white-space: nowrap; position: absolute; top: 0; left: 0;`,
     crit: `color: red; font-size: 1.5rem;`,
     full: `color: darkred; font-size: 2.1rem;`,
-    half: `color: black; font-family: pictos three; font-size: 2rem; padding-top:1px;`,
+    half: `color: black; font-family: pictos three; font-size: 2.6rem; padding-top:1px;`,
+    half2: `color: white; font-family: sans-serif; font-size: 1.3rem;`,
     healFull: `color: green; font-size: 2rem;`,
     list: {
       container: `font-size: 1.5rem; background: #41415c; border: 5px solid #1c7b74; border-radius: 3px; color: white; vertical-align: middle;`,
@@ -356,6 +360,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       sheets: ['dnd5e_r20'],
       tooltip: `Crit (%)`,
       style: styles.crit,
+      // style2: styles.critBackground,
       math: (damage, crit) => -(damage.total + crit.total),
       content: 'kk',
     },
@@ -370,8 +375,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       sheets: ['dnd5e_r20'],
       tooltip: `Half (%)`,
       style: styles.half,
+      style2: styles.half2,
       math: (damage) => -(Math.floor(0.5 * damage.total)),
       content: 'b',
+      content2: '&half;',
     },
     healingFull: {
       sheets: ['dnd5e_r20'],
@@ -1398,7 +1405,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   class ButtonController {
 
-    static _buttonKeys = ['sheets', 'content', 'tooltip', 'style', 'math', 'default', 'mathString', 'query'];
+    static _buttonKeys = ['sheets', 'content', 'content2', 'tooltip', 'style', 'style2', 'math', 'default', 'mathString', 'query'];
     _locator = null;
     _Config = {};
     _buttons = {};
@@ -1491,8 +1498,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
               modded.push(k);
             }
           }
-          else if (k === 'style') {
-            this._buttons[buttonData.name].style = styles[buttonData[k]] || buttonData[k] || '';
+          else if (/^style/.test(k)) {
+            this._buttons[buttonData.name][k] = styles[buttonData[k]] || buttonData[k] || '';
             modded.push(k);
           }
           else if (k === 'query') {
@@ -1558,10 +1565,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
         setWithQuery = btn.query ? `&lsqb;&lsqb;${boundingPre}${btn.query.replace(/%%MODIFIER%%/g, Math.abs(modifier))}${boundingPost}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
         tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
-        selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``;
+        selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``,
+        buttonHref = `!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}`,
+        buttonContent = `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style}">${btn.content}</a>`,
+        buttonContent2 = btn.content2 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style2}">${btn.content2}</a>` : ``;
       return (autoHide && modifier == 0) ?
         ``
-        : `<div style="${styles.buttonContainer}"  title="${tooltip}"><a href="!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}" style="${styles.buttonShared}${btn.style}">${btn.content}</a></div>`;
+        : `<div style="${styles.buttonContainer}"  title="${tooltip}">${buttonContent}${buttonContent2}</div>`;
     }
     verifyButtons() {
       const currentSheet = this._Config.getSetting('sheet'),
@@ -1584,7 +1594,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         sheets: Array.isArray(buttonData.sheets) ? buttonData.sheets : [],
         tooltip: `${buttonData.tooltip || ''}`,
         style: styleData[buttonData.style] || buttonData.style || '',
+        style2: styleData[buttonData.style2] || buttonData.style2 || '',
         content: buttonData.content || '?',
+        content2: buttonData.content2 || '',
         math: buttonData.math || null,
         mathString: buttonData.mathString || buttonData.math.toString(),
         query: buttonData.query || ``,
@@ -1607,7 +1619,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         query = queryString.replace(rxQuerySplit, ''),
         roundingPre = ``,
         roundingPost = ``;
-      // Deal with rounding for * /
+      // Deal with rounding for * and /
       if (/^[*/]/.test(operator)) {
         roundingPre = operator[1] === '+' ?
           `ceil(`
