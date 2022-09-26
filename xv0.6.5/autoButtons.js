@@ -236,7 +236,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const gmOnly = Config.getSetting('gmOnly') ? true : false,
         activeButtons = Config.getSetting(`enabledButtons`) || [],
         name = Helpers.findName(msg.content),
-        buttonArray = Config.getSetting('autosort') ? activeButtons.sort((a,b) => a.name > b.name ? 1 : -1) : activeButtons,
+        buttonArray = Config.getSetting('autosort') ? activeButtons.sort((a,b) => a > b ? 1 : -1) : activeButtons,
         htmlArray = buttonArray.map(btn => ButtonStore.createApiButton(btn, damage, crit)).filter(v=>v),
         darkMode = Config.getSetting('darkMode');
       let sourceAttackAbility;
@@ -309,7 +309,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           upcastCrit: ['hldmgcrit'],
         },
       },
-      defaultButtons: ['crit', 'damage', 'damageHalf', 'healingFull', 'damagePrimary', 'damageSecondary', 'critPrimary', 'critSecondary'],
+      defaultButtons: ['crit', 'critHalf', 'damage', 'damageHalf', 'healingFull'],
     },
     custom: {
       sheet: [],
@@ -332,7 +332,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     outer: `position: relative; vertical-align: middle; font-family: pictos; display: block; background: #f4e6b6; border: 1px solid black; height: auto; line-height: 34px; text-align: center; border-radius: 2px;`,
     rollName: `font-family: arial; font-size: 1.1rem; color: black; font-style:italic; font-weight: bold; position:relative; overflow: hidden; display: block; line-height: 1.2rem; margin: 1px 0px 0px 0px; white-space: nowrap; text-align: left; left: 2px;`,
     buttonContainer: `display: inline-block; text-align: center; vertical-align: middle; line-height: 26px; margin: auto 5px auto 5px; height: 26px;	width: 26px; border: #8c6700 1px solid;	box-shadow: 0px 0px 3px #805200; border-radius: 5px; background-color: whitesmoke; position: relative;`,
-    buttonShared: `background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; width: 100%; height: 100%; overflow: hidden;	white-space: nowrap; position: absolute; top: 0; left: 0;`,
+    buttonShared: `background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; width: 100%; height: 100%; overflow: hidden;	white-space: nowrap; position: absolute; top: 0; left: 0; text-decoration: none;`,
     crit: `color: darkred; font-size: 2.9rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
     crit2: `color: #ff4040; font-size: 1.8rem; line-height: 2.4rem;`,
     full: `color: darkred; font-size: 2.4rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
@@ -405,6 +405,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
    */
   const _defaultButtons = {
     crit: {
+      name: `crit`,
       sheets: ['dnd5e_r20'],
       tooltip: `Crit (%)`,
       style: styles.crit,
@@ -415,8 +416,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: 'k'
     },
     critHalf: {
+      name: `critHalf`,
       sheets: ['dnd5e_r20'],
-      tooltip: `Half (%)`,
+      tooltip: `Half Crit (%)`,
       style: styles.halfCrit,
       style2: styles.halfSmall,
       style3: styles.half2,
@@ -426,6 +428,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content3: '1/2',
     },
     damage: {
+      name: `damage`,
       sheets: ['dnd5e_r20'],
       tooltip: `Full (%)`,
       style: styles.full,
@@ -433,6 +436,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content: 'k',
     },
     damageHalf: {
+      name: `damageHalf`,
       sheets: ['dnd5e_r20'],
       tooltip: `Half (%)`,
       style: styles.half,
@@ -442,6 +446,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: '1/2',
     },
     healingFull: {
+      name: `healing`,
       sheets: ['dnd5e_r20'],
       tooltip: `Heal (%)`,
       style: styles.healFull,
@@ -452,6 +457,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     },
     // Buttons added in 0.6.x
     damagePrimary: {
+      name: `damagePrimary`,
       sheets: ['dnd5e_r20'],
       tooltip: `Damage 1 (%)`,
       style: styles.full,
@@ -461,6 +467,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: '1',
     },
     damageSecondary: {
+      name: `damageSecondary`,
       sheets: ['dnd5e_r20'],
       tooltip: `Damage 2 (%)`,
       style: styles.full,
@@ -470,17 +477,19 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: '2',
     },
     critPrimary: {
+      name: `critPrimary`,
       sheets: ['dnd5e_r20'],
       tooltip: `Crit 1 (%)`,
       style: styles.crit,
       style2: styles.crit2,
       style3: styles.damageLabel,
-      math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + damage.globaldamage),
+      math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + (crit.hldmgcrit||0) + damage.globaldamage + crit.globaldamagecrit),
       content: 'k',
       content2: 'k',
       content3: '1',
     },
     critSecondary: {
+      name: `critSecondary`,
       sheets: ['dnd5e_r20'],
       tooltip: `Crit 2 (%)`,
       style: styles.crit,
@@ -492,6 +501,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content3: '2',
     },
     'resist%': {
+      name: 'resist%',
       sheets: ['dnd5e_r20'],
       tooltip: `Damage Resist &percnt; (%)`,
       style: styles.resist,
@@ -502,6 +512,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: '&percnt;',
     },
     'resistN': {
+      name: 'resistN',
       sheets: ['dnd5e_r20'],
       tooltip: `Damage Resist Flat (%)`,
       style: styles.resist,
@@ -511,7 +522,34 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content: 'b',
       content2: 'n',
     },
+    'resistCrit%': {
+      name: 'resistCrit%',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit Resist &percnt; (%)`,
+      style: styles.halfCrit,
+      style2: styles.resistSmall,
+      style3: styles.resistLabel,
+      math: (damage, crit) => -(damage.total + crit.total),
+      query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
+      content: 'b',
+      content2: 'b',
+      content3: '&percnt;',
+    },
+    'resistCritN': {
+      name: 'resistCritN',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit Resist Flat (%)`,
+      style: styles.halfCrit,
+      style2: styles.resistSmall,
+      style3: styles.resistLabel,
+      math: (damage, crit) => -(damage.total + crit.total),
+      query: `-|Damage resist (%%MODIFIER%% - ??? damage)|0`,
+      content: 'b',
+      content2: 'b',
+      content3: 'n',
+    },
     'resistPrimary%': {
+      name: 'resistPrimary%',
       sheets: ['dnd5e_r20'],
       tooltip: `Damage Resist 1 &percnt; (%)`,
       style: styles.resist,
@@ -522,6 +560,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: '1&percnt;',
     },
     'resistPrimaryN': {
+      name: 'resistPrimaryN',
       sheets: ['dnd5e_r20'],
       tooltip: `Damage Resist 1 Flat (%)`,
       style: styles.resist,
@@ -532,6 +571,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: '1n',
     },
     'resistSecondary%': {
+      name: 'resistSecondary%',
       sheets: ['dnd5e_r20'],
       tooltip: `Damage Resist 2 &percnt; (%)`,
       style: styles.resist,
@@ -542,6 +582,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: '&percnt;2',
     },
     'resistSecondaryN': {
+      name: 'resistSecondaryN',
       sheets: ['dnd5e_r20'],
       tooltip: `Damage Resist 2 Flat (%)`,
       style: styles.resist,
@@ -552,48 +593,52 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: 'n2',
     },
     'resistPrimaryCrit%': {
+      name: 'resistPrimaryCrit%',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist 1 &percnt; (%)`,
       style: styles.halfCrit,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
-      math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + damage.globaldamage),
+      math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + (crit.hldmgcrit||0) + damage.globaldamage + crit.globaldamagecrit),
       query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
       content: 'b',
       content2: 'b',
       content3: '1&percnt;',
     },
     'resistPrimaryCritN': {
+      name: 'resistPrimaryCritN',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist 1 Flat (%)`,
       style: styles.halfCrit,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
-      math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + damage.globaldamage),
+      math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + (crit.hldmgcrit||0) + damage.globaldamage + crit.globaldamagecrit),
       query: `-|Damage resist (%%MODIFIER%% - ??? damage)|0`,
       content: 'b',
       content2: 'b',
       content3: '1n',
     },
     'resistSecondaryCrit%': {
+      name: 'resistSecondaryCrit%',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist 2 &percnt; (%)`,
       style: styles.halfCrit,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
-      math: (damage) => -(damage.dmg2),
+      math: (damage, crit) => -(damage.dmg2 + crit.crit2),
       query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
       content: 'b',
       content2: 'b',
       content3: '&percnt;2',
     },
     'resistSecondaryCritN': {
+      name: 'resistSecondaryCritN',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist 2 Flat (%)`,
       style: styles.halfCrit,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
-      math: (damage) => -(damage.dmg2),
+      math: (damage, crit) => -(damage.dmg2 + crit.crit2),
       query: `-|Damage resist (%%MODIFIER%% - ??? damage)|0`,
       content: 'b',
       content2: 'b',
@@ -1079,7 +1124,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           if (!buttonData.math) return { err: `Button must have an associated function, {{math=...}}` }
           buttonData.default = false;
           // construct query if provided
-          if (buttonData.query) buttonData.query = Button.splitAndEscapeQuery(buttonData.query);
+          // if (buttonData.query) buttonData.query = Button.splitAndEscapeQuery(buttonData.query);
           const result = this.buttons.addButton(buttonData);
           if (result.success) {
             this.buttons.showButton(buttonName);
@@ -1748,10 +1793,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             this._buttons[buttonData.name][k] = styles[buttonData[k]] || buttonData[k] || '';
             modded.push(k);
           }
-          else if (k === 'query') {
-            this._buttons[buttonData.name].query = Button.splitAndEscapeQuery(buttonData.query);
-            modded.push(k);
-          }
+          // else if (k === 'query') {
+          //   this._buttons[buttonData.name].query = Button.splitAndEscapeQuery(buttonData.query);
+          //   modded.push(k);
+          // }
           else {
             this._buttons[buttonData.name][k] = buttonData[k];
             modded.push(k);
@@ -1823,6 +1868,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const zeroBound = this._Config.getSetting('allowNegatives') ? false : true,
         boundingPre = zeroBound ? `{0, ` : ``,
         boundingPost = zeroBound ? `}kh1` : ``;
+      const queryString = Button.splitAndEscapeQuery(btn.query) || '';
       // debug.info(reportString);
       if (!btn || typeof(btn.math) !== 'function') {
         debug.error(`${scriptName}: error creating API button ${buttonName}`);
@@ -1830,7 +1876,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
       const modifier = btn.math(damage, crit),
         tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
-        setWithQuery = btn.query ? `&lsqb;&lsqb;${boundingPre}${btn.query.replace(/%%MODIFIER%%/g, Math.abs(modifier))}${boundingPost}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
+        setWithQuery = queryString ? `&lsqb;&lsqb;${boundingPre}${queryString.replace(/%%MODIFIER%%/g, Math.abs(modifier))}${boundingPost}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
         tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
         selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``,
         buttonHref = `!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}`,
