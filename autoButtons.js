@@ -3,7 +3,7 @@
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.6.9`,
+    scriptVersion = `0.7.0`,
     debugLevel = 2;
   let undoUninstall = null;
 
@@ -27,7 +27,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         customButtons: {}
       },
       settings: {
-        // 0.6.x Setting additions
+        // 0.6.x => 0.7.0 Setting additions
         darkMode: {
           type: 'boolean',
           default: false,
@@ -90,7 +90,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       options: defaultCliOptions,
     });
     Services.register({ serviceName: 'cli', serviceReference: CLI });
-    // v0.6.x CLI additions
+    // v0.6.x => 0.7.0 CLI additions
     CLI.addOptions([
       {
         name: `cloneButton`,
