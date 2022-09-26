@@ -201,7 +201,15 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           }
         }
         if (v < `0.7.0`) {
-          // No structural changes - cli & settings additions no longer need schema updates
+          // Two default buttons renamed - damageCrit => crit, and damageFull => damage
+          const currentShownButtons = state[scriptName].settings.enabledButtons;
+          debug.warn(currentShownButtons);
+          if (currentShownButtons) {
+            const { oldDamage, oldCrit } = currentShownButtons.reduce((out, v, i) => v === 'damageCrit' ? { ...out, oldCrit: i } : v === 'damageFull' ? { ...out, oldDamage: i } : out, {});
+            if (oldDamage != null) currentShownButtons[oldDamage] = 'damage';
+            if (oldCrit != null) currentShownButtons[oldCrit] = 'crit';
+            debug.warn(state[scriptName].settings.enabledButtons);
+          }
         }
         state[scriptName].version = Config.version;
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
