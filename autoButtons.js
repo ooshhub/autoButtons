@@ -1,8 +1,9 @@
-/* globals state log on sendChat playerIsGM */ //eslint-disable-line
+/* globals state log on sendChat playerIsGM findObjs */ //eslint-disable-line
+
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.6.2`,
+    scriptVersion = `0.6.9`,
     debugLevel = 2;
   let undoUninstall = null;
 
@@ -13,9 +14,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     error: function(...args) { if (debugLevel > 0) console.error(...args) },
   }
   
-/**
- * CORE SCRIPT
- */
+  /**
+   * INIT SCRIPT & SETTINGS/CLI ADDITIONS FROM LAST MINOR VERSION
+   */
   const startScript = () => {
 
     const Services = new ServiceLocator({ name: 'autoButtonServices' });
@@ -27,6 +28,41 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       },
       settings: {
         // 0.6.x Setting additions
+        darkMode: {
+          type: 'boolean',
+          default: false,
+          name: `Dark Mode`,
+          description: `Palette change for the button bar`,
+          menuAction: `$--darkMode`,
+        },
+        multiattack: {
+          type: 'boolean',
+          default: false,
+          name: `Multiattack`,
+          description: `Attempt to link the button bar label to the source attack for easy repeat rolls. 5e only.`,
+          menuAction: `$--multiattack`,
+        },
+        allowNegatives: {
+          type: 'boolean',
+          default: false,
+          name: `Allow negatives`,
+          description: `Allow final results to be negative. This can cause healing to cause damage, or damage to heal`,
+          menuAction: `$--negatives`,
+        },
+        autosort: {
+          type: 'boolean',
+          default: false,
+          name: `Sort buttons`,
+          description: `Auto sort buttons by unicode order`,
+          menuAction: `$--autosort`,
+        },
+        autohide: {
+          type: 'boolean',
+          default: true,
+          name: `Autohide buttons`,
+          description: `Autohide buttons with 0 reported damage`,
+          menuAction: `$--autohide`,
+        },
         report: {
           type: 'string',
           range: [ 'off', 'gm', 'control', 'all' ],
@@ -37,13 +73,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           description: `Report hitpoint changes to chat`,
           menuAction: `$--report`,
         },
-        //
         ...defaultScriptSettings,
       },
     });
     Services.register({serviceName: 'config', serviceReference: Config });
 
-    const ButtonStore = new ButtonController({
+    const ButtonStore = new ButtonManager({
       name: 'ButtonStore',
       defaultButtons: _defaultButtons,
       services: [Services.config],
@@ -55,9 +90,67 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       options: defaultCliOptions,
     });
     Services.register({ serviceName: 'cli', serviceReference: CLI });
-
     // v0.6.x CLI additions
     CLI.addOptions([
+      {
+        name: `cloneButton`,
+        rx: /^clonebut/i,
+        description: `Clone a button`,
+        requiredServices: { buttons: 'ButtonManager' },
+        action: function(args) {
+          const parts = args.trim().split(/\s+/g),
+            originalButtonName = parts[0],
+            cloneName = parts[1];
+          return this.buttons.cloneButton(originalButtonName, cloneName);
+        }
+      },
+      {
+        name: `renameButton`,
+        rx: /^renamebut/i,
+        description: `Rename a button (Custom buttons only)`,
+        requiredServices: { buttons: 'ButtonManager' },
+        action: function(args) {
+          const parts = args.trim().split(/\s+/g),
+            originalButtonName = parts[0],
+            newName = parts[1];
+          return this.buttons.renameButton(originalButtonName, newName);
+        }
+      },
+      {
+        name: 'darkMode',
+        rx: /^dark/i,
+        description: `Palette change for the button bar`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) { return this.config.changeSetting('darkMode', args) }
+      },
+      {
+        name: 'multiattack',
+        rx: /^multiat/i,
+        description: `Attempt to link the button bar label to the source attack for easy repeat rolls`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) { return this.config.changeSetting('multiattack', args) }
+      },
+      {
+        name: 'allowNegatives',
+        rx: /^negative/i,
+        description: `Allow final results to be negative`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) { return this.config.changeSetting('allowNegatives', args) }
+      },
+      {
+        name: 'autosort',
+        rx: /^autosort/i,
+        description: `Auto sort buttons by unicode order`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) { return this.config.changeSetting('autosort', args) }
+      },
+      {
+        name: 'autohide',
+        rx: /^autohide/i,
+        description: `Autohide buttons with 0 reported damage`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) { return this.config.changeSetting('autohide', args) }
+      },
       {
         name: 'report',
         rx: /^report/i,
@@ -69,7 +162,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         }
       },
     ]);
-    //
 
     // Check install and version
     const checkInstall = () => {
@@ -108,6 +200,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             delete state[scriptName].settings.templates.damageProperties.crit;
           }
         }
+        if (v < `0.7.0`) {
+          // No structural changes - cli & settings additions no longer need schema updates
+        }
         state[scriptName].version = Config.version;
         log(`***UPDATED*** ====> ${scriptName} to v${Config.version}`);
       }
@@ -138,17 +233,25 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     
     // Send buttons to chat
     const sendButtons = (damage, crit, msg) => {
-      const gmOnly = Config.getSetting('gmOnly') ? true : false;
-      let buttonHtml = '',
+      const gmOnly = Config.getSetting('gmOnly') ? true : false,
         activeButtons = Config.getSetting(`enabledButtons`) || [],
-        name = Helpers.findName(msg.content);
-      name = name || `Apply:`;
-      activeButtons.forEach(btn => buttonHtml += ButtonStore.createApiButton(btn, damage, crit));
-      const buttonTemplate = `<div class="autobutton" style="${styles.outer}${Config.getSetting('bump') ? styles.mods.bump : ''}}"><div style="${styles.rollName}">${name}</div>${buttonHtml}</div>`;
+        name = Helpers.findName(msg.content),
+        buttonArray = Config.getSetting('autosort') ? activeButtons.sort((a,b) => a > b ? 1 : -1) : activeButtons,
+        htmlArray = buttonArray.map(btn => ButtonStore.createApiButton(btn, damage, crit)).filter(v=>v),
+        darkMode = Config.getSetting('darkMode');
+      let sourceAttackAbility;
+      if (Config.getSetting('multiattack')) sourceAttackAbility = Helpers5e.findNpcAttack(msg, name);
+      const buttonBarLabel = sourceAttackAbility ? `<div class="rollname" style="${styles.rollName}"><a href="&grave;${sourceAttackAbility}" style="${styles.rollName}">${name}</a></div>` : `<div class="rollname" style="${styles.rollName}${Helpers.appendDarkMode('rollName', darkMode)}">${name}</div>`;
+      if (htmlArray.length < 1) {
+        debug.info(`No valid buttons were returned`);
+        return;
+      }
+      const buttonHtml = htmlArray.join('');
+      const buttonTemplate = `<div class="autobutton" style="${styles.outer}${Helpers.appendDarkMode('outer', darkMode)}${Config.getSetting('bump') ? styles.mods.bump : ''}}">${buttonBarLabel}${buttonHtml}</div>`;
       Helpers.toChat(`${buttonTemplate}`, gmOnly);
     }
 
-    // Deconstruct roll
+    // Deconstruct & repackage Roll20 roll object
     const handleDamageRoll = (msg) => {
       const dmgFields = Config.getSetting('templates/damageProperties/damageFields')||[],
         critFields = Config.getSetting('templates/damageProperties/critFields')||[];
@@ -159,8 +262,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (isSpell) {
           const upcastDamageFields = Config.getSetting('templates/damageProperties/upcastDamage')||[],
             upcastCritFields = Config.getSetting('templates/damageProperties/upcastCrit')||[];
-          damage.total += Helpers.processFields(upcastDamageFields, msg).total||0;
-          crit.total += Helpers.processFields(upcastCritFields, msg).total||0;
+          const upcastDamage = Helpers.processFields(upcastDamageFields, msg),
+            upcastCrit = Helpers.processFields(upcastCritFields, msg);
+          Helpers.mergeDamageObjects(damage, upcastDamage);
+          Helpers.mergeDamageObjects(crit, upcastCrit);
         }
       }
       sendButtons(damage, crit, msg);
@@ -183,17 +288,15 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
     }
 
-    // The Go button
+    // Make script do stuff
     checkInstall();
     on('chat:message', handleInput);
-
   }
 
   /**
-   * SCRIPT DATA
+   * SHEET PRESET DATA
    */
-
-  // TODO: Replace with PresetController class
+  // TODO: Replace with PresetController class ???
   const preset = {
     dnd5e_r20: {
       sheet: ['dnd5e_r20'],
@@ -206,8 +309,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           upcastCrit: ['hldmgcrit'],
         },
       },
-      defaultButtons: ['damageCrit', 'damageFull', 'damageHalf', 'healingFull'],
-      // userButtons array, to save user button setup?
+      defaultButtons: ['crit', 'critHalf', 'damage', 'damageHalf', 'healingFull'],
     },
     custom: {
       sheet: [],
@@ -222,23 +324,40 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
   }
 
-  // Styles for chat UI elements
+  /**
+   * CSS STYLES
+   */
   const styles = {
     error: `color: red; font-weight: bold;`,
     outer: `position: relative; vertical-align: middle; font-family: pictos; display: block; background: #f4e6b6; border: 1px solid black; height: auto; line-height: 34px; text-align: center; border-radius: 2px;`,
-    rollName: `font-family: arial; font-size: 1.1rem; color: black; font-style:italic; position:relative; overflow: hidden; display: block; line-height: 1rem; margin: 2px 0px 1px 0px; white-space: nowrap; text-align: left; left: 2px;`,
-    buttonContainer: `display: inline-block; text-align: center; vertical-align: middle; line-height: 26px; margin: auto 5px auto 5px; height: 26px;	width: 26px; border: #8c6700 1px solid;	box-shadow: 0px 0px 3px #805200; border-radius: 5px; background-color: whitesmoke;`,
-    buttonShared: `background-color: transparent;	border: none;	padding: 0px;	width: 100%; height: 100%; overflow: hidden;	white-space: nowrap;`,
-    crit: `color: red; font-size: 1.5rem;`,
-    full: `color: darkred; font-size: 2.1rem;`,
-    half: `color: black; font-family: pictos three; font-size: 2rem; padding-top:1px;`,
-    healFull: `color: green; font-size: 2rem;`,
+    rollName: `font-family: arial; font-size: 1.1rem; color: black; font-style:italic; font-weight: bold; position:relative; overflow: hidden; display: block; line-height: 1.2rem; margin: 1px 0px 0px 0px; white-space: nowrap; text-align: left; left: 2px;`,
+    buttonContainer: `display: inline-block; text-align: center; vertical-align: middle; line-height: 26px; margin: auto 5px auto 5px; height: 26px;	width: 26px; border: #8c6700 1px solid;	box-shadow: 0px 0px 3px #805200; border-radius: 5px; background-color: whitesmoke; position: relative;`,
+    buttonShared: `background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; width: 100%; height: 100%; overflow: hidden;	white-space: nowrap; position: absolute; top: 0; left: 0; text-decoration: none;`,
+    crit: `color: darkred; font-size: 2.9rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
+    crit2: `color: #ff4040; font-size: 1.8rem; line-height: 2.4rem;`,
+    full: `color: darkred; font-size: 2.4rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
+    half: `color: black; font-family: pictos three; font-size: 2.6rem; line-height: 3rem; text-shadow: 0px 0px 2px black;`,
+    halfSmall: `color: black; font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; text-shadow: 0px 0px 1px black;`,
+    half2: `color: whitesmoke; font-family: cursive; font-size: 0.9rem;`,
+    halfCrit: `color: #d51d1d; font-family: pictos three; font-size: 3.2rem; line-height: 2.9rem; text-shadow: 0px 0px 2px black;`,
+    healFull: `color: green; font-size: 2.4rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
+    damageLabel: `font-family: cursive; font-size: 1.2rem; font-weight: bolder; color: #f2c8c8; line-height: 2.4rem;`,
+    healLabel: `color: #cdf7d1; font-family:cursive; font-size:1.8rem; font-weight:bold; line-height: 2.2rem; text-shadow: 0px 0px 2px white;`,
+    resist: ` font-family: pictos three; font-size: 2.6rem; line-height: 3rem; text-shadow: 0px 0px 2px black; color: #003f82;`,
+    resistSmall: ` font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; color: #003f82; text-shadow: 0px 0px 1px black;`,
+    resistLabel: `font-family: cursive; font-size: 1rem;`,
+    darkMode: {
+      rollName: `color: white;`,
+      outer: `background: #31302c;`,
+      buttonContainer: `background-color: #7b7565; border-color: #aea190; box-shadow: 0px 0px 2px #aea190;`,
+    },
     list: {
       container: `font-size: 1.5rem; background: #41415c; border: 5px solid #1c7b74; border-radius: 3px; color: white; vertical-align: middle;`,
       header: `text-align: center; font-weight: bold; padding: 6px 0px 6px 0px; border-bottom: solid 1px darkgray; line-height: 1.5em;`,
       body: `padding: 8px 1rem 8px 1rem;`,
       row: `vertical-align: middle; margin: 0.2em auto 0.2em auto; font-size: 1.2em; line-height: 1.4em;`,
       name: `display: inline-block; vertical-align: middle;	width: 60%; margin-left: 5%; overflow-x: hidden;`,
+      faded: `opacity: 0.4;`,
       buttonContainer: `	display: inline-block; vertical-align: middle; width: 10%; text-align: center; line-height: 1.2em;`,
       controls: {
         common: `position: relative; font-family: pictos; display: inline-block; background-color: darkgray; padding: 0px; margin: 0px; border: 1px solid #c2c2c2; border-radius: 3px; width: 1.1em; height: 1.1em; line-height: 1.1em; font-size: 1.2em;`,
@@ -257,15 +376,15 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       headerRow: ``,
       row: `background-color: #5e5e63; margin: 0.5rem;`,
       headerCell: `	text-align: center; font-size: 1.7rem; padding: 1rem; border-bottom: 1px solid #7fb07f;`,
-      cell: `padding: 0.2rem 1rem; line-height: 3.5rem;`,
+      cell: `padding: 0.2rem 1rem; line-height: 2.5rem; margin: 1px 0px;`,
       rowBorders: `border-top: 1px solid #7fb07f;`,
       footer: `margin: 0 auto 1.5rem auto;`,
-      settingName: `border: 1px solid whitesmoke; padding: 0.4rem 0; border-radius: 0.5rem; cursor: help;`,
+      settingName: `border: 1px solid whitesmoke; padding: 0.4rem 0; border-radius: 0.5rem; cursor: help; margin: 1px auto;`,
       button: `	display: inline-block; background-color: darkgray; border: 1px solid #cae1df; box-shadow: 0px 0px 3px #bcdbd8; border-radius: 3px; color: #045754; padding: 0.3rem 0.5rem; margin: 0.2rem 0!important; font-size: 1.1em; line-height: 1.2em;`,
     },
     components: {
       labelWithDelete: function(label, commandString) {
-        const styleOuter = `border: 1px solid whitesmoke; padding: 0.2rem 0rem; border-radius: 0.5rem; width: max-content; margin: auto; display: inline-block; line-height: 1.2rem; white-space: nowrap;`,
+        const styleOuter = `border: 1px solid whitesmoke; padding: 0.2rem 0rem; border-radius: 0.5rem; width: max-content; margin: 2px auto; display: inline-block; line-height: 1.2rem; white-space: nowrap;`,
           styleDelete = `font-family: pictos; color: darkred;	background-color: gray; height: 1rem; line-height: 1.2rem; width: 1.2rem; text-align: center; margin: 0 1rem; border: 1px solid #aaa8a8; border-radius: 0.5rem;`,
           styleLabel = `display: inline-block; overflow-x: clip; margin-left: 0.5rem;`
         return `<div class="label-delete" style="${styleOuter}"><div style="${styleLabel}">${label}</div><a href="${commandString}" class="delete-button" style="${styleDelete}" title="Delete">&ast;</a></div>`
@@ -281,42 +400,258 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
   }
 
-  // Default buttons
+  /**
+   * DEFAULT BUTTONS
+   */
   const _defaultButtons = {
-    damageCrit: {
+    crit: {
+      name: `crit`,
       sheets: ['dnd5e_r20'],
       tooltip: `Crit (%)`,
       style: styles.crit,
+      style2: styles.crit2,
+      // style2: styles.critBackground,
       math: (damage, crit) => -(damage.total + crit.total),
-      content: 'kk',
+      content: 'k',
+      content2: 'k'
     },
-    damageFull: {
+    critHalf: {
+      name: `critHalf`,
+      sheets: ['dnd5e_r20'],
+      tooltip: `Half Crit (%)`,
+      style: styles.halfCrit,
+      style2: styles.halfSmall,
+      style3: styles.half2,
+      math: (damage, crit) => -(Math.floor(0.5 * (damage.total + crit.total))),
+      content: 'b',
+      content2: 'b',
+      content3: '1/2',
+    },
+    damage: {
+      name: `damage`,
       sheets: ['dnd5e_r20'],
       tooltip: `Full (%)`,
       style: styles.full,
-      math: (damage) => -(1 * damage.total),
+      math: (damage) => -(damage.total),
       content: 'k',
     },
     damageHalf: {
+      name: `damageHalf`,
       sheets: ['dnd5e_r20'],
       tooltip: `Half (%)`,
       style: styles.half,
+      style2: styles.half2,
       math: (damage) => -(Math.floor(0.5 * damage.total)),
       content: 'b',
+      content2: '1/2',
     },
     healingFull: {
+      name: `healing`,
       sheets: ['dnd5e_r20'],
       tooltip: `Heal (%)`,
       style: styles.healFull,
+      style2: styles.healLabel,
       math: (damage) => (damage.total),
-      content: '&',
+      content: 'k',
+      content2: '+',
+    },
+    // Buttons added in 0.6.x
+    damagePrimary: {
+      name: `damagePrimary`,
+      sheets: ['dnd5e_r20'],
+      tooltip: `Damage 1 (%)`,
+      style: styles.full,
+      style2: styles.damageLabel,
+      math: (damage) => -(damage.dmg1 + (damage.hldmg||0) + damage.globaldamage),
+      content: 'k',
+      content2: '1',
+    },
+    damageSecondary: {
+      name: `damageSecondary`,
+      sheets: ['dnd5e_r20'],
+      tooltip: `Damage 2 (%)`,
+      style: styles.full,
+      style2: styles.damageLabel,
+      math: (damage) => -(damage.dmg2),
+      content: 'k',
+      content2: '2',
+    },
+    critPrimary: {
+      name: `critPrimary`,
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit 1 (%)`,
+      style: styles.crit,
+      style2: styles.crit2,
+      style3: styles.damageLabel,
+      math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + (crit.hldmgcrit||0) + damage.globaldamage + crit.globaldamagecrit),
+      content: 'k',
+      content2: 'k',
+      content3: '1',
+    },
+    critSecondary: {
+      name: `critSecondary`,
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit 2 (%)`,
+      style: styles.crit,
+      style2: styles.crit2,
+      style3: styles.damageLabel,
+      math: (damage, crit) => -(damage.dmg2 + crit.crit2),
+      content: 'k',
+      content2: 'k',
+      content3: '2',
+    },
+    'resist%': {
+      name: 'resist%',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Damage Resist &percnt; (%)`,
+      style: styles.resist,
+      style2: styles.resistLabel,
+      math: (damage) => -(damage.total),
+      query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
+      content: 'b',
+      content2: '&percnt;',
+    },
+    'resistN': {
+      name: 'resistN',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Damage Resist Flat (%)`,
+      style: styles.resist,
+      style2: styles.resistLabel,
+      math: (damage) => -(damage.total),
+      query: `-|Damage resist (%%MODIFIER%% - ??? damage)|0`,
+      content: 'b',
+      content2: 'n',
+    },
+    'resistCrit%': {
+      name: 'resistCrit%',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit Resist &percnt; (%)`,
+      style: styles.halfCrit,
+      style2: styles.resistSmall,
+      style3: styles.resistLabel,
+      math: (damage, crit) => -(damage.total + crit.total),
+      query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
+      content: 'b',
+      content2: 'b',
+      content3: '&percnt;',
+    },
+    'resistCritN': {
+      name: 'resistCritN',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit Resist Flat (%)`,
+      style: styles.halfCrit,
+      style2: styles.resistSmall,
+      style3: styles.resistLabel,
+      math: (damage, crit) => -(damage.total + crit.total),
+      query: `-|Damage resist (%%MODIFIER%% - ??? damage)|0`,
+      content: 'b',
+      content2: 'b',
+      content3: 'n',
+    },
+    'resistPrimary%': {
+      name: 'resistPrimary%',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Damage Resist 1 &percnt; (%)`,
+      style: styles.resist,
+      style2: styles.resistLabel,
+      math: (damage) => -(damage.dmg1 + (damage.hldmg||0) + damage.globaldamage),
+      query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
+      content: 'b',
+      content2: '1&percnt;',
+    },
+    'resistPrimaryN': {
+      name: 'resistPrimaryN',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Damage Resist 1 Flat (%)`,
+      style: styles.resist,
+      style2: styles.resistLabel,
+      math: (damage) => -(damage.dmg1 + (damage.hldmg||0) + damage.globaldamage),
+      query: `-|Damage resist (%%MODIFIER%% - ??? damage)|0`,
+      content: 'b',
+      content2: '1n',
+    },
+    'resistSecondary%': {
+      name: 'resistSecondary%',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Damage Resist 2 &percnt; (%)`,
+      style: styles.resist,
+      style2: styles.resistLabel,
+      math: (damage) => -(damage.dmg2),
+      query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
+      content: 'b',
+      content2: '&percnt;2',
+    },
+    'resistSecondaryN': {
+      name: 'resistSecondaryN',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Damage Resist 2 Flat (%)`,
+      style: styles.resist,
+      style2: styles.resistLabel,
+      math: (damage) => -(damage.dmg2),
+      query: `-|Damage resist (%%MODIFIER%% - ??? damage)|0`,
+      content: 'b',
+      content2: 'n2',
+    },
+    'resistPrimaryCrit%': {
+      name: 'resistPrimaryCrit%',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit Resist 1 &percnt; (%)`,
+      style: styles.halfCrit,
+      style2: styles.resistSmall,
+      style3: styles.resistLabel,
+      math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + (crit.hldmgcrit||0) + damage.globaldamage + crit.globaldamagecrit),
+      query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
+      content: 'b',
+      content2: 'b',
+      content3: '1&percnt;',
+    },
+    'resistPrimaryCritN': {
+      name: 'resistPrimaryCritN',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit Resist 1 Flat (%)`,
+      style: styles.halfCrit,
+      style2: styles.resistSmall,
+      style3: styles.resistLabel,
+      math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + (crit.hldmgcrit||0) + damage.globaldamage + crit.globaldamagecrit),
+      query: `-|Damage resist (%%MODIFIER%% - ??? damage)|0`,
+      content: 'b',
+      content2: 'b',
+      content3: '1n',
+    },
+    'resistSecondaryCrit%': {
+      name: 'resistSecondaryCrit%',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit Resist 2 &percnt; (%)`,
+      style: styles.halfCrit,
+      style2: styles.resistSmall,
+      style3: styles.resistLabel,
+      math: (damage, crit) => -(damage.dmg2 + crit.crit2),
+      query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
+      content: 'b',
+      content2: 'b',
+      content3: '&percnt;2',
+    },
+    'resistSecondaryCritN': {
+      name: 'resistSecondaryCritN',
+      sheets: ['dnd5e_r20'],
+      tooltip: `Crit Resist 2 Flat (%)`,
+      style: styles.halfCrit,
+      style2: styles.resistSmall,
+      style3: styles.resistLabel,
+      math: (damage, crit) => -(damage.dmg2 + crit.crit2),
+      query: `-|Damage resist (%%MODIFIER%% - ??? damage)|0`,
+      content: 'b',
+      content2: 'b',
+      content3: 'n2',
     },
   };
 
   // Global regex
   const rx = { on: /\b(1|true|on)\b/i, off: /\b(0|false|off)\b/i };
 
-  // Helper functions
+  /**
+   * HELPER FUNCTIONS
+   */
   class Helpers { 
     // Process roll object according to rolltemplate fields
     static processFields(fieldArray, msg) {
@@ -339,9 +674,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
     // Simple name finder, provided rolltemplate has some kind of 'name' property
     static findName(msgContent) {
-      const rxName = /name=([^}]+)}/i;
-      let name = msgContent.match(rxName);
-      return name ? name[1] : null;
+      const rxRname = /{rname=(.+?)}}/i;
+      const rxName = /{name=(.+?)}}/i;
+      let name = msgContent.match(rxRname) || msgContent.match(rxName);
+      return name ? name[1] : 'Apply:';
     }
     // sendChat shortcut
     static toChat(msg, whisper = true) {
@@ -353,7 +689,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       let words = inpString.split(/\s+/g);
       return words.map(w => `${w[0].toUpperCase()}${w.slice(1)}`).join(` `);
     }
-    // Split {{handlebars=moustache}} notation to key value
+    // Split {{handlebars=moustache}} notation to key:value
     static splitHandlebars(inputString) {
       let output = {},
         kvArray = inputString.match(/{{[^}]+}}/g)||[];
@@ -375,7 +711,21 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         return `${wPre}${wSuf}`;
       }).join('');
     }
-
+    /**
+     * Grab a dark mode CSS append string if it exists and dark mode is enabled
+     * @param {string} styleName - keyname of style
+     * @param {boolean} darkModeEnabled - boolean dark mode setting
+     * @param {object} stylesPath - parent object of target key/value pair
+     * @returns {string} - CSS style string
+     */
+    static appendDarkMode(styleName, darkModeEnabled, stylesPath = styles) {
+      return (!darkModeEnabled || !stylesPath || !stylesPath.darkMode || !stylesPath.darkMode[styleName]) ? `` : stylesPath.darkMode[styleName];
+    }
+    /**
+     * Check if an object is a basic JS object
+     * @param {any} input 
+     * @returns {bool}
+     */
     static isObj(input) { return (typeof(input) === 'object' && input.constructor.name === 'Object') ? true : false }
 
     static copyObj(inputObj) { return (typeof inputObj !== 'object') ? null : JSON.parse(JSON.stringify(inputObj)); }
@@ -434,18 +784,69 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
       if (names.length) new ChatDialog({ title: 'Buttons copied to new version', content: names });
     }
+
+    /**
+     * Recalculate the total key in a damage object
+     * @param {object} damageObject 
+     */
+
+    static recalculateDamageTotal(damageObject) {
+      damageObject.total = 0;
+      for (const key in damageObject) damageObject.total += key === 'total' ? 0 : damageObject[key];
+    }
+    /**
+     * Merge two damage objects together and recalculate total
+     * @param {object} baseObject 
+     * @param {object} addObject 
+     */
+    static mergeDamageObjects(baseObject, addObject) {
+      Object.assign(baseObject, addObject);
+      Helpers.recalculateDamageTotal(baseObject);
+    }
   }
 
-  // 5e specific helpers
+  /**
+   * 5E-SPECIFIC HELPERS
+   */
   class Helpers5e {
     // Spell detection
     static is5eAttackSpell(msgContent) {
       const rxSpell = /{spelllevel=(cantrip|\d+)/;
       return rxSpell.test(msgContent) ? 1 : 0;
     }
+    /**
+     * Find a repeating_npcaction attack from the roll template content. Optionally supply the attack name.
+     * @param {Object} msg - r20 message object
+     * @param {string} [attackName] - name of the attack 
+     * @returns {?string} - content of @{rollbase} in the target attack
+     */
+    static findNpcAttack = (msg, attackName) => {
+      if (!msg.rolltemplate || !/^npc/.test(msg.rolltemplate)) return;
+      const rx = {
+        attackName: /rname=(.+?)}}/,
+        characterName: /{{name=(.+?)}}/,
+        attackNameAttribute: /^repeating_npcaction_(-[0-z-]{19})_name/i,
+      };
+      attackName = attackName || (msg.content.match(rx.attackName)||[])[1];
+      const characterName = (msg.content.match(rx.characterName)||[])[1],
+        char = findObjs({ type: 'character', name: characterName })[0];
+      if (!char || !attackName) return null;
+      const attackRowId = findObjs({ type: 'attribute', characterid: char.id }).reduce((out, attribute) => {
+        if (attribute.get('current') === attackName) {
+          const rowMatch = attribute.get('name').match(rx.attackNameAttribute);
+          if (rowMatch) return rowMatch[1];
+        }
+        return out;
+      }, ``);
+      return attackRowId ? `&commat;&lcub;${characterName}|repeating_npcaction_${attackRowId}_rollbase&rcub;` : null;
+      // const targetRollAttribute = findObjs({ type: 'attribute', characterid: char.id, name: `repeating_npcaction_${attackRowId}_rollbase` })[0];
+      // if (targetRollAttribute) return targetRollAttribute.get('current');
+    }
   }
 
-  // Default command line options
+  /**
+   * COMMAND LINE INTERFACE OPTIONS
+   */
   const defaultCliOptions = [
     {
       name: 'bump',
@@ -493,7 +894,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'loadPreset',
       rx: /^loadpre/i,
       description: `Select a preset for a Game System`,
-      requiredServices: { config: 'ConfigController', buttons: 'ButtonController' },
+      requiredServices: { config: 'ConfigController', buttons: 'ButtonManager' },
       action: function (args) {
         const newVal = args.trim();
         if (Object.keys(preset).includes(newVal)) {
@@ -619,7 +1020,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'listButtons',
       rx: /^(list)?button/i,
       description: `List available buttons`,
-      requiredServices: { config: 'ConfigController', buttons: 'ButtonController' },
+      requiredServices: { config: 'ConfigController', buttons: 'ButtonManager' },
       action: function() {
         const removableButtons = this.buttons.getButtonNames({ default: false }),
           usedButtons = this.config.getSetting('enabledButtons'),
@@ -629,7 +1030,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         const links = {
           hide: `!autoButton --hideButton %name%`,
           show: `!autoButton --showButton %name%`,
-          delete: `!autoButton --deleteButton %name%`,
+          delete: `${styles.components.confirmApiCommand(`delete button %name%?`)}--deleteButton %name%`,
           disabled: `#`
         }
         const labels = {
@@ -640,7 +1041,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         };
         const controls = ['show', 'hide', 'delete'];
         const listBody = reorderedButtons.map(button => {
-          let rowHtml = `<div class="list-row" style="${styles.list.row}"><div class="button-name" style="${styles.list.name}">${removableButtons.includes(button) ? '' : '&ast;'}%name%</div>`;
+          const fadeText = usedButtons.includes(button) ? '' :  styles.list.faded;
+          let rowHtml = `<div class="list-row" style="${styles.list.row}"><div class="button-name" style="${styles.list.name}${fadeText}">${removableButtons.includes(button) ? '' : '&ast;'}%name%</div>`;
           controls.forEach(control => {
             const controlType = (
                 (control === 'show' && availableButtons.includes(button)) ||
@@ -660,8 +1062,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     {
       name: 'showButton',
       rx: /^showbut/i,
-      description: `Add a button to the template`,
-      requiredServices: { config: 'ConfigController', buttons: 'ButtonController' },
+      description: `Add a button to the button bar`,
+      requiredServices: { config: 'ConfigController', buttons: 'ButtonManager' },
       action: function (args) {
         const newVal = args.trim();
         const validButtons = this.buttons.getButtonNames({ hidden: true, currentSheet: true });
@@ -674,7 +1076,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'hideButton',
       rx: /^hidebut/i,
       description: `Remove a button from the template`,
-      requiredServices: { config: 'ConfigController', buttons: 'ButtonController' },
+      requiredServices: { config: 'ConfigController', buttons: 'ButtonManager' },
       action: function (args) {
         const newVal = args.trim();
         const validButtons = this.buttons.getButtonNames({ shown: true, currentSheet: true });
@@ -712,7 +1114,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'createButton',
       rx: /^createbut/i,
       description: `Create a new button`,
-      requiredServices: { config: 'ConfigController', buttons: 'ButtonController' },
+      requiredServices: { config: 'ConfigController', buttons: 'ButtonManager' },
       action: function (args) {
         const buttonData = Helpers.splitHandlebars(args);
         if (buttonData && buttonData.name) {
@@ -721,7 +1123,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           if (this.buttons.getButtonNames().includes(buttonName)) return { err: `Invalid button name, already in use: "${buttonName}"` }
           if (!buttonData.math) return { err: `Button must have an associated function, {{math=...}}` }
           buttonData.default = false;
-          return this.buttons.addButton(buttonData);
+          // construct query if provided
+          // if (buttonData.query) buttonData.query = Button.splitAndEscapeQuery(buttonData.query);
+          const result = this.buttons.addButton(buttonData);
+          if (result.success) {
+            this.buttons.showButton(buttonName);
+            return result;
+          } 
         } else return { err: `Bad input for button creation` }
       }
     },
@@ -729,7 +1137,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'editButton',
       rx: /^editbut/i,
       description: `Edit an existing button`,
-      requiredServices: { buttons: 'ButtonController' },
+      requiredServices: { buttons: 'ButtonManager' },
       action: function (args) {
         let buttonData = Helpers.splitHandlebars(args);
         debug.log(buttonData);
@@ -744,9 +1152,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'deleteButton',
       rx: /^del(ete)?but/i,
       description: `Remove a button`,
-      requiredServices: { buttons: 'ButtonController', config: 'ConfigController' },
+      requiredServices: { buttons: 'ButtonManager', config: 'ConfigController' },
       action: function (args) {
-        const removeResult = this.buttons.removeButton({ name: args }),
+        const removeResult = this.buttons.removeButton(args.trim()),
           buttonIsEnabled = this.config.getSetting('enabledButtons').includes(args);
         if (removeResult.success) {
           if (buttonIsEnabled) this.config.changeSetting('enabledButtons', args);
@@ -809,8 +1217,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           delete state[scriptName];
           new ChatDialog({
             header: `${scriptName} uninstalled!`,
-            body: `Removed all ${scriptName} settings from API state. Click the 'whoopsie' button below if you didn't mean to destroy all your settings! All settings will be *permantently* lost on sandbox restart.`,
-            footer: `<a style="${styles.list.controls.create}" href="!autobut --uninstall undo">Oh Shit!</a>`,
+            body: `Removed all ${scriptName} data from API state. Click the 'whoopsie' button below if you didn't mean to destroy all your settings!<br>Otherwise, all settings will be *permantently* lost on sandbox restart.<br>Deleting the script now will result in a complete removal of the script and all associated data.`,
+            footer: `<a style="${styles.list.controls.create}" href="!autobut --uninstall undo">Restore!</a>`,
           }, 'listButtons');
         }
       }
@@ -818,11 +1226,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
   ];
 
   /**
+   * SCRIPT USER-CONFIG OPTIONS
+   * 
    * Must have a valid type to be pulled into SettingsManager as a setting
    * 'object' type can be used for nesting settings keys
    * 'validate' is a validator for the input, not necessarily the key itself (e.g. an array might accept strings in the validator)
-   * 'name'/'description' are only used for chat menu
-   * 'menuAction' must be supplied. Starting with '$' will automatically convert into a button, otherwise supply actual text required
+   * 'name'/'description' are only used for chat menu UI
+   * 'menuAction' must be supplied. Starting with '$' will automatically convert into a button with leading API command syntax, otherwise supply actual text required
    */
   const defaultScriptSettings = {
     sheet: {
@@ -834,48 +1244,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'Character sheet',
       description: 'Character sheet in use',
       menuAction: `$--loadPreset`
-    },
-    templates: {
-      type: 'object',
-      names: {
-        type: 'array',
-        validate: (v) => typeof(v) === 'string',
-        default: [],
-        name: `Roll templates & properties`,
-        description: `Names of roll templates & properties watched by autoButtons`,
-        menuAction: `<a href="!autobut --listTemplates" style="${styles.table.button}">Templates</a><br><a href="!autobut --listProps" style="${styles.table.button}">Properties</a>`,
-      },
-      damageProperties: {
-        type: 'object',
-        damageFields:  {
-          type: 'array',
-          validate: (v) => typeof(v) === 'string',
-          default: [],
-        },
-        critFields: {
-          type: 'array',
-          validate: (v) => typeof(v) === 'string',
-          default: []
-        },
-        upcastDamage: {
-          type: 'array',
-          validate: (v) => typeof(v) === 'string',
-          default: []
-        },
-        upcastCrit: {
-          type: 'array',
-          validate: (v) => typeof(v) === 'string',
-          default: []
-        },
-        get value() {
-          const output = {};
-          for (const key in this) {
-            if (key === 'value') continue;
-            if (this[key].value) output[key] = this[key].value;
-          }
-          return output;
-        }
-      },
     },
     enabledButtons: {
       type: 'array',
@@ -932,13 +1300,58 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: `Slim buttons`,
       description: `CSS to bump the button container up in chat to save some space`,
       menuAction: `$--bump`,
-    }
+    },
+    templates: {
+      type: 'object',
+      names: {
+        type: 'array',
+        validate: (v) => typeof(v) === 'string',
+        default: [],
+        name: `Roll templates & properties`,
+        description: `Names of roll templates & properties watched by autoButtons`,
+        menuAction: `<a href="!autobut --listTemplates" style="${styles.table.button}">Templates</a><br><a href="!autobut --listProps" style="${styles.table.button}">Properties</a>`,
+      },
+      damageProperties: {
+        type: 'object',
+        damageFields:  {
+          type: 'array',
+          validate: (v) => typeof(v) === 'string',
+          default: [],
+        },
+        critFields: {
+          type: 'array',
+          validate: (v) => typeof(v) === 'string',
+          default: []
+        },
+        upcastDamage: {
+          type: 'array',
+          validate: (v) => typeof(v) === 'string',
+          default: []
+        },
+        upcastCrit: {
+          type: 'array',
+          validate: (v) => typeof(v) === 'string',
+          default: []
+        },
+        get value() {
+          const output = {};
+          for (const key in this) {
+            if (key === 'value') continue;
+            if (this[key].value) output[key] = this[key].value;
+          }
+          return output;
+        }
+      },
+    },
   }
 
  /**
  * CLASS DEFINITIONS
  */
 
+  /**
+   * Service Locator - Find a registered service from any scope in the script with ServiceLocator.getLocator().getService('serviceName')
+   */
   class ServiceLocator {
 
     static _active = null;
@@ -968,6 +1381,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
   }
 
+  /**
+   * Settings Manager - Handles fetch and store of user settings to state{} object, reads and writes to user settings. Processes the defaultScriptSettings{} object on init. Access via ConfigManager
+   */
   class SettingsManager {
 
     _settingsKeys = {};
@@ -1171,9 +1587,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       processObject(this._settingsKeys, output);
       return output;
     }
-
   }
 
+  /**
+   * Config Controller - Handles user settings via injected SettingsManager, and Custom Button storage via internal _store
+   */
   class ConfigController {
 
     _version = { M: 0, m: 0, p: 0 };
@@ -1268,15 +1686,19 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
   }
 
-  class ButtonController {
+  /**
+   * Button Manager - Handles CRUD operations, math/query functions and HTML output for all buttons, both internal and Custom Button
+   */
+  class ButtonManager {
 
-    static _buttonKeys = ['sheets', 'content', 'tooltip', 'style', 'math', 'default', 'mathString'];
+    static _buttonKeys = ['sheets', 'content', 'content2', 'content3', 'tooltip', 'style', 'style2', 'style3', 'math', 'default', 'mathString', 'query'];
+    static _editKeys = ['clone', 'rename'];
     _locator = null;
     _Config = {};
     _buttons = {};
 
     constructor(data={}) {
-      Object.assign(this, { name: data.name || 'newButtonController' });
+      Object.assign(this, { name: data.name || 'newButtonManager' });
       // Requires access to a ConfigController
       this._locator = ServiceLocator.getLocator() || this._locator;
       this._Config = this._locator ? this._locator.getService('ConfigController') : null;
@@ -1284,7 +1706,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       for (let button in data.defaultButtons) { this._buttons[button] = new Button(data.defaultButtons[button], styles) }
     }
 
-    get keys() { return ButtonController._buttonKeys }
+    get keys() { return ButtonManager._buttonKeys }
+    get editKeys() { return [ ...ButtonManager._buttonKeys, ...ButtonManager._editKeys ]}
 
     getButtonNames(filters={ default: null, currentSheet: null, shown: null, hidden: null }) {
       let buttons = Object.entries(this._buttons);
@@ -1300,9 +1723,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
 
     static parseMathString(inputString) {
-      debug.log(inputString);
+      // debug.info(inputString);
       inputString = `${inputString}`;
       let err = '';
+      // Default buttons will send in a JS function, remove the declaration part
+      inputString = inputString.replace(/^.*?=>\s*/, '');
+
       // Convert to JS
       const formulaReplacer = {
         '$1Math.floor': /([^.]|^)floor/ig,
@@ -1338,11 +1764,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
     }
     addButton(buttonData={}) {
+      debug.info(buttonData);
       const newButton = buttonData.default === false ? new CustomButton(buttonData) : new Button(buttonData);
       if (newButton.err) return { success: 0, err: newButton.err }
       if (this._buttons[newButton.name]) return { success: 0, err: `Button "${newButton.name}" already exists` };
       this._buttons[newButton.name] = newButton;
-      debug.info(this._buttons);
       this.saveToStore();
       return { success: 1, msg: `New Button "${newButton.name}" successfully created` }
     }
@@ -1350,11 +1776,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const modded = [];
       if (!this._buttons[buttonData.name]) return { success: 0, err: `Button "${buttonData.name}" does not exist.` }
       if (this._buttons[buttonData.name].default) return { success: 0, err: `Cannot edit default buttons.` }
-      this.keys.forEach(k => {
+      this.editKeys.forEach(k => {
+        debug.log(k, buttonData[k]);
         if (buttonData[k] != null) {
           if (k === 'default') return; // Don't allow reassignment of 'default' property
           else if (k === 'math') {
-            const newMath = ButtonController.parseMathString(buttonData[k]);
+            const newMath = ButtonManager.parseMathString(buttonData[k]);
             if (newMath.err) return newMath;
             else {
               this._buttons[buttonData.name].mathString = buttonData[k];
@@ -1362,10 +1789,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
               modded.push(k);
             }
           }
-          else if (k === 'style') {
-            this._buttons[buttonData.name].style = styles[buttonData[k]] || buttonData[k] || '';
+          else if (/^style/.test(k)) {
+            this._buttons[buttonData.name][k] = styles[buttonData[k]] || buttonData[k] || '';
             modded.push(k);
           }
+          // else if (k === 'query') {
+          //   this._buttons[buttonData.name].query = Button.splitAndEscapeQuery(buttonData.query);
+          //   modded.push(k);
+          // }
           else {
             this._buttons[buttonData.name][k] = buttonData[k];
             modded.push(k);
@@ -1375,12 +1806,32 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (modded.length) this.saveToStore();
       return modded.length ? { success: 1, msg: `Modified ${buttonData.name} fields: ${modded.join(', ')}` } : { success: 0, err: `No fields supplied.` }
     }
-    removeButton(buttonData={}) {
-      if (!this._buttons[buttonData.name]) return { success: 0, err: `Button "${buttonData.name}" does not exist.` }
-      if (this._buttons[buttonData.name].default) return { success: 0, err: `Cannot delete default buttons.` }
-      delete this._buttons[buttonData.name];
-      this._Config.toStore(`customButtons/${buttonData.name}`, null);
-      return { success: 1, msg: `Removed "${buttonData.name}".` }
+    removeButton(buttonName) {
+      if (!this._buttons[buttonName]) return { success: 0, err: `Button "${buttonName}" does not exist.` }
+      if (this._buttons[buttonName].default) return { success: 0, err: `Cannot delete default buttons.` }
+      delete this._buttons[buttonName];
+      this._Config.toStore(`customButtons/${buttonName}`, null);
+      return { success: 1, msg: `Removed "${buttonName}".` }
+    }
+    cloneButton(originalButtonName, newButtonName) {
+      if (this._buttons[originalButtonName] && newButtonName) {
+        const cloneName = /\s/.test(newButtonName) ? Helpers.camelise(newButtonName) : newButtonName,
+          cloneData = { ...this._buttons[originalButtonName], name: cloneName, default: false },
+          copyResult = this.addButton(cloneData);
+        return copyResult.success ? { success: 1, msg: `Cloned button ${originalButtonName} => ${cloneName}` } : copyResult;
+      }
+      else return { err: `Could not find button "${originalButtonName}", or bad clone button name "${newButtonName}"` }
+    }
+    renameButton(originalButtonName, newButtonName) {
+      if (!this._buttons[originalButtonName]) return { success: 0, err: `Button "${originalButtonName}" could not be found` };
+      if (this._buttons[originalButtonName].default) return { success: 0, err: `Cannot rename a default button.` };
+      const cloneName = /\s/.test(newButtonName) ? Helpers.camelise(newButtonName) : newButtonName,
+        cloneResult = this.cloneButton(originalButtonName, cloneName);
+      if (cloneResult.success) {
+        this.removeButton(originalButtonName);
+        return { success: 1, msg: `Renamed button ${originalButtonName} => ${cloneName}` };
+      }
+      else return cloneResult;
     }
     showButton(buttonName) {
       if (this._buttons[buttonName] && !this._Config.getSetting('enabledButtons').includes(buttonName)) { return this._Config.changeSetting('enabledButtons', buttonName) }
@@ -1399,26 +1850,42 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       // Styled report template for if Aaron implements decoding in TM
       // const templateRaw = `'<div class="autobuttons-tm-report" style="${styles.report}">{name}: {bar1_value:before}HP >> {bar1_value}HP</div>'`;
       // return encodeURIComponent(templateRaw);
+
+      // !token-mod --set bar1_value|-[[floor(query*17)]]!
+      
     }
     createApiButton(buttonName, damage, crit) {
       const btn = this._buttons[buttonName],
+        autoHide = this._Config.getSetting(`autohide`),
         bar = this._Config.getSetting('hpBar'),
         overheal = this._Config.getSetting('overheal'),
         overkill = this._Config.getSetting('overkill'),
         sendReport = (this._Config.getSetting('report')||``).toLowerCase(),
         reportString = [ 'all', 'gm', 'control' ].includes(sendReport)
           ? ` --report ${sendReport}|${this._getReportTemplate(bar)}`
-          : ``;
-        // console.info(reportString);
+          : ``,
+        darkMode = this._Config.getSetting('darkMode');
+      const zeroBound = this._Config.getSetting('allowNegatives') ? false : true,
+        boundingPre = zeroBound ? `{0, ` : ``,
+        boundingPost = zeroBound ? `}kh1` : ``;
+      const queryString = Button.splitAndEscapeQuery(btn.query) || '';
+      // debug.info(reportString);
       if (!btn || typeof(btn.math) !== 'function') {
         debug.error(`${scriptName}: error creating API button ${buttonName}`);
         return ``;
       }
       const modifier = btn.math(damage, crit),
         tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
-        tokenModCmd = (modifier > 0) ? (!overheal) ? `+${modifier}!` : `+${modifier}` : (modifier < 0 && !overkill) ? `${modifier}!` : modifier,
-        selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``;
-      return `<div style="${styles.buttonContainer}"  title="${tooltip}"><a href="!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}" style="${styles.buttonShared}${btn.style}">${btn.content}</a></div>`;
+        setWithQuery = queryString ? `&lsqb;&lsqb;${boundingPre}${queryString.replace(/%%MODIFIER%%/g, Math.abs(modifier))}${boundingPost}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
+        tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
+        selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``,
+        buttonHref = `!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}`,
+        buttonContent = `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style}">${btn.content}</a>`,
+        buttonContent2 = btn.content2 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style2}">${btn.content2}</a>` : ``,
+        buttonContent3 = btn.content3 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style3}">${btn.content3}</a>` : ``;
+      return (autoHide && modifier == 0) ?
+        ``
+        : `<div class="button-container" style="${styles.buttonContainer}${Helpers.appendDarkMode('buttonContainer', darkMode)}"  title="${tooltip}">${buttonContent}${buttonContent2}${buttonContent3}</div>`;
     }
     verifyButtons() {
       const currentSheet = this._Config.getSetting('sheet'),
@@ -1434,6 +1901,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
   }
 
+  /**
+   * Button - Basic schema of a Button object
+   */
   class Button {
     constructor(buttonData={}, styleData=styles) {
       Object.assign(this, {
@@ -1441,16 +1911,48 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         sheets: Array.isArray(buttonData.sheets) ? buttonData.sheets : [],
         tooltip: `${buttonData.tooltip || ''}`,
         style: styleData[buttonData.style] || buttonData.style || '',
+        style2: styleData[buttonData.style2] || buttonData.style2 || '',
+        style3: styleData[buttonData.style3] || buttonData.style3 || '',
         content: buttonData.content || '?',
+        content2: buttonData.content2 || '',
+        content3: buttonData.content3 || '',
         math: buttonData.math || null,
         mathString: buttonData.mathString || buttonData.math.toString(),
+        query: buttonData.query || ``,
         default: buttonData.default === false ? false : true,
       });
       debug.log(this);
       if (typeof(this.math) !== 'function') return { err: `Button "${this.name}" math function failed validation` };
     }
+
+    static splitAndEscapeQuery(queryString) {
+      if (!queryString || typeof(queryString) !== 'string') return ``;
+      const replacers = {
+        '*': `&ast;`,
+        '+': `&plus;`,
+      }
+      const replacerFunction = (m) => replacers[m],
+        rxQuerySplit = /^[+*/-][+-0]?\|/,
+        rxReplacers = new RegExp(`[${Object.keys(replacers).reduce((out,v) => out += `\\${v}`, ``)}]`, 'g');
+      let operator = (queryString.match(rxQuerySplit)||[])[0] || ``,
+        query = queryString.replace(rxQuerySplit, ''),
+        roundingPre = ``,
+        roundingPost = ``;
+      // Deal with rounding for * and /
+      if (/^[*/]/.test(operator)) {
+        roundingPre = operator[1] === '+' ?
+          `ceil(`
+          : `floor(`
+        roundingPost = `)`;
+      }
+      operator = (operator[0]||``).replace(rxReplacers, replacerFunction);
+      return query ? `${roundingPre}%%MODIFIER%%${operator}&quest;&lcub;${query}&rcub;${roundingPost}` : ``;
+    }
   }
 
+  /**
+   * Custom Button - user-made buttons pass through here for validation before being passed to superclass
+   */
   class CustomButton extends Button {
     constructor(buttonData={}) {
       debug.log(buttonData);
@@ -1458,14 +1960,18 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       Object.assign(buttonData, {
         name: buttonData.name || 'newCustomButton',
         mathString: buttonData.mathString || buttonData.math.toString(),
-        math: ButtonController.parseMathString(buttonData.mathString || buttonData.math.toString()),
+        math: ButtonManager.parseMathString(buttonData.mathString || buttonData.math.toString()),
         style: buttonData.style || 'full',
+        query: buttonData.query || ``,
         default: false,
       });
       super(buttonData);
     }
   }
 
+  /**
+   * Command Line Interface - handle adding and removing CLI Options, and assess chat input when passed in from HandleInput()
+   */
   class CommandLineInterface {
 
     _locator = null;
@@ -1478,7 +1984,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (!this._locator) debug.warn(`${this.constructor.name} could not find the service locator. Any commands relying on services will be disabled.`);
       Object.assign(this._services, {
         config: this._locator.getService('ConfigController'),
-        buttons: this._locator.getService('ButtonController'),
+        buttons: this._locator.getService('ButtonManager'),
         cli: this,
       });
       if (cliData.options && cliData.options.length) this.addOptions(cliData.options);
@@ -1495,7 +2001,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             for (let service in data.requiredServices) {
               const svc =
                 service === 'ConfigController' ? this._services.config
-                : service === 'ButtonController' ? this._services.buttons
+                : service === 'ButtonManager' ? this._services.buttons
                 : this._locator.getService(data.requiredServices[service]);
               if (svc) suppliedServices[service] = svc;
               else return debug.warn(`${this.name}: Warning - Service "${service}" could not be found for option ${data.name}. CLI option not registered.`);
@@ -1533,9 +2039,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
 
     trigger(option, ...args) { if (this._options[option]) this._options[option].action(...args) }
-
   }
 
+  /**
+   * Command Line Option - basic model for a user-facing CLI option
+   */
   class CommandLineOption {
 
     constructor(optionData={}) {
@@ -1552,6 +2060,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     
   }
 
+  /**
+   * Chat Dialog - Short-lived layout class which, by default, is sent straight to chat once constructed.
+   * Can be instantiated and persisted by disabling the default autoSend in the constructor
+   */
   class ChatDialog {
 
     static _templates = {
@@ -1631,6 +2143,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
   }
 
+  // Tim would get mad if this wasn't here
   on('ready', startScript);
 
 })();
