@@ -368,9 +368,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     resist: ` font-family: pictos three; font-size: 2.6rem; line-height: 3rem; text-shadow: 0px 0px 2px black; color: #003f82;`,
     resistSmall: ` font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; color: #003f82; text-shadow: 0px 0px 1px black;`,
     resistLabel: `font-family: cursive; font-size: 1rem;`,
-    imageIcon: `width: 100%;`,
+    imageIcon: `background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; width: 100%;`,
     imageIcons: {
-      damage: ``,
+      damage: `https://s3.amazonaws.com/files.d20.io/images/306656028/gtPy6tdbegC9QOtDd1nf6Q/original.png`,
       damageHalf: ``,
       crit: ``,
       critHalf: ``,
@@ -492,7 +492,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       content2: '1/2',
     },
     healingFull: {
-      name: `healing`,
+      name: `healingFull`,
       sheets: ['dnd5e_r20'],
       tooltip: `Heal (%)`,
       style: styles.healFull,
@@ -553,7 +553,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       style: styles.resist,
       style2: styles.resistLabel,
       math: (damage) => -(damage.total),
-      query: `*|Damage multiplier (??? * %%MODIFIER%% damage)|0`,
+      query: `*|Damage multiplier (??? &ast; %%MODIFIER%% damage)|0`,
       content: 'b',
       content2: '&percnt;',
     },
@@ -1898,7 +1898,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       // return encodeURIComponent(templateRaw);
 
       // !token-mod --set bar1_value|-[[floor(query*17)]]!
-      
+    }
+    _getImageIcon(buttonName) {
+      return `https://raw.githubusercontent.com/ooshhub/autoButtons/main/assets/imageIcons/${buttonName}.png`.replace(/%/g, 'P');
+      // May need to switch to this if images move
+      // return styles.imageIcons[buttonName];
     }
     createApiButton(buttonName, damage, crit) {
       const btn = this._buttons[buttonName],
@@ -1927,7 +1931,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``,
         buttonHref = `!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}`,
         useImageIcon = this._Config.getSetting('imageIcons') && btn.default,
-        buttonContent = useImageIcon ? `<a href="${buttonHref}" style="${styles.imageIcon}"><img src="${styles.imageIcons[btn.name]}"/></a>`
+        buttonContent = useImageIcon ? `<a href="${buttonHref}" style="${styles.imageIcon}"><img src="${this._getImageIcon(btn.name)}"/></a>`
           : `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style}">${btn.content}</a>`,
         buttonContent2 = useImageIcon ? ``
           : btn.content2 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style2}">${btn.content2}</a>` : ``,
