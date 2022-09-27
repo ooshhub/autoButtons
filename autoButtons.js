@@ -3,7 +3,7 @@
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.7.0`,
+    scriptVersion = `0.7.1`,
     debugLevel = 2;
   let undoUninstall = null;
 
@@ -339,14 +339,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     error: `color: red; font-weight: bold;`,
     outer: `position: relative; vertical-align: middle; font-family: pictos; display: block; background: #f4e6b6; border: 1px solid black; height: auto; line-height: 34px; text-align: center; border-radius: 2px;`,
     rollName: `font-family: arial; font-size: 1.1rem; color: black; font-style:italic; font-weight: bold; position:relative; overflow: hidden; display: block; line-height: 1.2rem; margin: 1px 0px 0px 0px; white-space: nowrap; text-align: left; left: 2px;`,
-    buttonContainer: `display: inline-block; text-align: center; vertical-align: middle; line-height: 26px; margin: auto 5px auto 5px; height: 26px;	width: 26px; border: #8c6700 1px solid;	box-shadow: 0px 0px 3px #805200; border-radius: 5px; background-color: whitesmoke; position: relative;`,
+    buttonContainer: `display: inline-block; text-align: center; vertical-align: middle; line-height: 26px; margin: auto 5px auto 5px; height: 2.6rem; width: 2.6rem; border: #8c6700 1px solid;	box-shadow: 0px 0px 3px #805200; border-radius: 5px; background-color: whitesmoke; position: relative;`,
     buttonShared: `background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; width: 100%; height: 100%; overflow: hidden;	white-space: nowrap; position: absolute; top: 0; left: 0; text-decoration: none;`,
     crit: `color: darkred; font-size: 2.9rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
     crit2: `color: #ff4040; font-size: 1.8rem; line-height: 2.4rem;`,
     full: `color: darkred; font-size: 2.4rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
     half: `color: black; font-family: pictos three; font-size: 2.6rem; line-height: 3rem; text-shadow: 0px 0px 2px black;`,
     halfSmall: `color: black; font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; text-shadow: 0px 0px 1px black;`,
-    half2: `color: whitesmoke; font-family: cursive; font-size: 0.9rem;`,
+    half2: `color: whitesmoke; font-family: cursive; font-size: 0.9rem; line-height: 2.6rem;`,
     halfCrit: `color: #d51d1d; font-family: pictos three; font-size: 3.2rem; line-height: 2.9rem; text-shadow: 0px 0px 2px black;`,
     healFull: `color: green; font-size: 2.4rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
     damageLabel: `font-family: cursive; font-size: 1.2rem; font-weight: bolder; color: #f2c8c8; line-height: 2.4rem;`,
