@@ -3,7 +3,7 @@
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.7.1`,
+    scriptVersion = `0.7.2`,
     debugLevel = 2;
   let undoUninstall = null;
 
@@ -28,6 +28,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       },
       settings: {
         // 0.6.x => 0.7.0 Setting additions
+        imageIcons: {
+          type: 'boolean',
+          default: false,
+          name: `Image Icons`,
+          description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
+          menuAction: `$--imageicon`,
+        },
         darkMode: {
           type: 'boolean',
           default: false,
@@ -92,6 +99,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     Services.register({ serviceName: 'cli', serviceReference: CLI });
     // v0.6.x => 0.7.0 CLI additions
     CLI.addOptions([
+      {
+        name: 'imageIcons',
+        rx: /^imagei/i,
+        description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
+        requiredServices: { config: 'ConfigController' },
+        action: function (args) { return this.config.changeSetting('imageIcons', args) }
+      },
       {
         name: `cloneButton`,
         rx: /^clonebut/i,
@@ -347,13 +361,37 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     half: `color: black; font-family: pictos three; font-size: 2.6rem; line-height: 3rem; text-shadow: 0px 0px 2px black;`,
     halfSmall: `color: black; font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; text-shadow: 0px 0px 1px black;`,
     half2: `color: whitesmoke; font-family: cursive; font-size: 0.9rem; line-height: 2.6rem;`,
-    halfCrit: `color: #d51d1d; font-family: pictos three; font-size: 3.2rem; line-height: 2.9rem; text-shadow: 0px 0px 2px black;`,
+    critHalf: `color: #d51d1d; font-family: pictos three; font-size: 3.2rem; line-height: 2.9rem; text-shadow: 0px 0px 2px black;`,
     healFull: `color: green; font-size: 2.4rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
     damageLabel: `font-family: cursive; font-size: 1.2rem; font-weight: bolder; color: #f2c8c8; line-height: 2.4rem;`,
     healLabel: `color: #cdf7d1; font-family:cursive; font-size:1.8rem; font-weight:bold; line-height: 2.2rem; text-shadow: 0px 0px 2px white;`,
     resist: ` font-family: pictos three; font-size: 2.6rem; line-height: 3rem; text-shadow: 0px 0px 2px black; color: #003f82;`,
     resistSmall: ` font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; color: #003f82; text-shadow: 0px 0px 1px black;`,
     resistLabel: `font-family: cursive; font-size: 1rem;`,
+    imageIcon: `width: 100%;`,
+    imageIcons: {
+      damage: ``,
+      damageHalf: ``,
+      crit: ``,
+      critHalf: ``,
+      healingFull: ``,
+      damagePrimary: ``,
+      damageSecondary: ``,
+      critPrimary: ``,
+      critSecondary: ``,
+      'resist%': ``,
+      'resistN': ``,
+      'resistCrit%': ``,
+      'resistCritN': ``,
+      'resistPrimary%': ``,
+      'resistPrimaryN': ``,
+      'resistSecondary%': ``,
+      'resistSecondaryN': ``,
+      'resistPrimaryCrit%': ``,
+      'resistPrimaryCritN': ``,
+      'resistSecondaryCrit%': ``,
+      'resistSecondaryCritN': ``,
+    },
     darkMode: {
       rollName: `color: white;`,
       outer: `background: #31302c;`,
@@ -366,7 +404,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       row: `vertical-align: middle; margin: 0.2em auto 0.2em auto; font-size: 1.2em; line-height: 1.4em;`,
       name: `display: inline-block; vertical-align: middle;	width: 60%; margin-left: 5%; overflow-x: hidden;`,
       faded: `opacity: 0.4;`,
-      buttonContainer: `	display: inline-block; vertical-align: middle; width: 10%; text-align: center; line-height: 1.2em;`,
+      buttonContainer: `	display: inline-block; vertical-align: middle; width: 10%; text-align: center; line-height: 1.2em; text-decoration: none;`,
       controls: {
         common: `position: relative; font-family: pictos; display: inline-block; background-color: darkgray; padding: 0px; margin: 0px; border: 1px solid #c2c2c2; border-radius: 3px; width: 1.1em; height: 1.1em; line-height: 1.1em; font-size: 1.2em;`,
         show: `color: #03650b;`,
@@ -427,7 +465,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: `critHalf`,
       sheets: ['dnd5e_r20'],
       tooltip: `Half Crit (%)`,
-      style: styles.halfCrit,
+      style: styles.critHalf,
       style2: styles.halfSmall,
       style3: styles.half2,
       math: (damage, crit) => -(Math.floor(0.5 * (damage.total + crit.total))),
@@ -534,7 +572,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'resistCrit%',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist &percnt; (%)`,
-      style: styles.halfCrit,
+      style: styles.critHalf,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
       math: (damage, crit) => -(damage.total + crit.total),
@@ -547,7 +585,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'resistCritN',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist Flat (%)`,
-      style: styles.halfCrit,
+      style: styles.critHalf,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
       math: (damage, crit) => -(damage.total + crit.total),
@@ -604,7 +642,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'resistPrimaryCrit%',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist 1 &percnt; (%)`,
-      style: styles.halfCrit,
+      style: styles.critHalf,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
       math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + (crit.hldmgcrit||0) + damage.globaldamage + crit.globaldamagecrit),
@@ -617,7 +655,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'resistPrimaryCritN',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist 1 Flat (%)`,
-      style: styles.halfCrit,
+      style: styles.critHalf,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
       math: (damage, crit) => -(damage.dmg1 + crit.crit1 + (damage.hldmg||0) + (crit.hldmgcrit||0) + damage.globaldamage + crit.globaldamagecrit),
@@ -630,7 +668,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'resistSecondaryCrit%',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist 2 &percnt; (%)`,
-      style: styles.halfCrit,
+      style: styles.critHalf,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
       math: (damage, crit) => -(damage.dmg2 + crit.crit2),
@@ -643,7 +681,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       name: 'resistSecondaryCritN',
       sheets: ['dnd5e_r20'],
       tooltip: `Crit Resist 2 Flat (%)`,
-      style: styles.halfCrit,
+      style: styles.critHalf,
       style2: styles.resistSmall,
       style3: styles.resistLabel,
       math: (damage, crit) => -(damage.dmg2 + crit.crit2),
@@ -1888,9 +1926,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
         selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``,
         buttonHref = `!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}`,
-        buttonContent = `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style}">${btn.content}</a>`,
-        buttonContent2 = btn.content2 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style2}">${btn.content2}</a>` : ``,
-        buttonContent3 = btn.content3 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style3}">${btn.content3}</a>` : ``;
+        useImageIcon = this._Config.getSetting('imageIcons') && btn.default,
+        buttonContent = useImageIcon ? `<a href="${buttonHref}" style="${styles.imageIcon}"><img src="${styles.imageIcons[btn.name]}"/></a>`
+          : `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style}">${btn.content}</a>`,
+        buttonContent2 = useImageIcon ? ``
+          : btn.content2 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style2}">${btn.content2}</a>` : ``,
+        buttonContent3 = useImageIcon ? ``
+          : btn.content3 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style3}">${btn.content3}</a>` : ``;
       return (autoHide && modifier == 0) ?
         ``
         : `<div class="button-container" style="${styles.buttonContainer}${Helpers.appendDarkMode('buttonContainer', darkMode)}"  title="${tooltip}">${buttonContent}${buttonContent2}${buttonContent3}</div>`;
