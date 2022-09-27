@@ -1690,7 +1690,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         confirm = styles.components.confirmApiCommand(`reset to default sheet settings?`),
         footerContent = `<div style="${styles.table.footer}"><a href="${confirm} --reset" style="${styles.list.controls.create}">Reset Sheet Settings</a>`;
       menuOptions.unshift(['Key', 'Setting']);
-      new ChatDialog({ title: `${scriptName} Settings`, content: menuOptions, footer: footerContent }, 'table');
+      new ChatDialog({ title: `${scriptName} settings<br>v${scriptVersion}`, content: menuOptions, footer: footerContent }, 'table');
     }
   }
 
