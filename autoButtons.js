@@ -5,7 +5,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
   const scriptName = `autoButtons`,
     scriptVersion = `0.7.2`,
     debugLevel = 2;
-  let undoUninstall = null;
+  let undoUninstall = null,
+    cacheBusted = false;
 
   const debug = {
     log: function(...args) { if (debugLevel > 3) console.log(...args) },
@@ -271,6 +272,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const buttonHtml = htmlArray.join('');
       const buttonTemplate = `<div class="autobutton" style="${styles.outer}${Helpers.appendDarkMode('outer', darkMode)}${Config.getSetting('bump') ? styles.mods.bump : ''}}">${buttonBarLabel}${buttonHtml}</div>`;
       Helpers.toChat(`${buttonTemplate}`, gmOnly);
+      cacheBusted = true;
     }
 
     // Deconstruct & repackage Roll20 roll object
@@ -361,13 +363,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     half: `color: black; font-family: pictos three; font-size: 2.6rem; line-height: 3rem; text-shadow: 0px 0px 2px black;`,
     halfSmall: `color: black; font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; text-shadow: 0px 0px 1px black;`,
     half2: `color: whitesmoke; font-family: cursive; font-size: 0.9rem; line-height: 2.6rem;`,
-    critHalf: `color: #d51d1d; font-family: pictos three; font-size: 3.2rem; line-height: 2.9rem; text-shadow: 0px 0px 2px black;`,
+    critHalf: `color: #d51d1d; font-family: pictos three; font-size: 3.2rem; line-height: 2.8rem; text-shadow: 0px 0px 2px black;`,
     healFull: `color: green; font-size: 2.4rem; line-height: 2.3rem; text-shadow: 0px 0px 2px black;`,
     damageLabel: `font-family: cursive; font-size: 1.2rem; font-weight: bolder; color: #f2c8c8; line-height: 2.4rem;`,
     healLabel: `color: #cdf7d1; font-family:cursive; font-size:1.8rem; font-weight:bold; line-height: 2.2rem; text-shadow: 0px 0px 2px white;`,
-    resist: ` font-family: pictos three; font-size: 2.6rem; line-height: 3rem; text-shadow: 0px 0px 2px black; color: #003f82;`,
+    resist: ` font-family: pictos three; font-size: 2.6rem; line-height: 2.8rem; text-shadow: 0px 0px 2px black; color: #003f82;`,
     resistSmall: ` font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; color: #003f82; text-shadow: 0px 0px 1px black;`,
-    resistLabel: `font-family: cursive; font-size: 1rem;`,
+    resistLabel: `font-family: cursive; font-size: 1rem; line-height: 2.6rem; `,
     imageIcon: `width: 100%;`, //background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; 
     imageIcons: {
       damage: `https://s3.amazonaws.com/files.d20.io/images/306656028/gtPy6tdbegC9QOtDd1nf6Q/original.png`,
@@ -1899,10 +1901,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
       // !token-mod --set bar1_value|-[[floor(query*17)]]!
     }
-    _getImageIcon(buttonName, cacheBust) {
+    _getImageIcon(buttonName, cacheBust, version = '2a') {
+      if (!cacheBusted) {
+        cacheBust = true;
+      }
+      const url = `https://raw.githubusercontent.com/ooshhub/autoButtons/main/assets/imageIcons/${buttonName}.png?${version}`.replace(/%/g, 'P');
       return cacheBust ?
-        `https://raw.githubusercontent.com/ooshhub/autoButtons/main/assets/imageIcons/${buttonName}.png?${Math.floor(Math.random()*1000000000)}`.replace(/%/g, 'P')
-        : `https://raw.githubusercontent.com/ooshhub/autoButtons/main/assets/imageIcons/${buttonName}.png`.replace(/%/g, 'P');
+        `${url}${Math.floor(Math.random()*1000000000)}`
+        : url;
       // May need to switch to this if images move
       // return styles.imageIcons[buttonName];
     }
@@ -1933,7 +1939,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``,
         buttonHref = `!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}`,
         useImageIcon = this._Config.getSetting('imageIcons') && btn.default,
-        buttonContent = useImageIcon ? `<a href="${buttonHref}" style="${styles.buttonShared}"><img src="${this._getImageIcon(btn.name, true)}" style="${styles.imageIcon}"/></a>`
+        buttonContent = useImageIcon ? `<a href="${buttonHref}" style="${styles.buttonShared}"><img src="${this._getImageIcon(btn.name)}" style="${styles.imageIcon}"/></a>`
           : `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style}">${btn.content}</a>`,
         buttonContent2 = useImageIcon ? ``
           : btn.content2 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style2}">${btn.content2}</a>` : ``,
