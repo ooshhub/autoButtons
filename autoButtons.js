@@ -368,7 +368,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     resist: ` font-family: pictos three; font-size: 2.6rem; line-height: 3rem; text-shadow: 0px 0px 2px black; color: #003f82;`,
     resistSmall: ` font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; color: #003f82; text-shadow: 0px 0px 1px black;`,
     resistLabel: `font-family: cursive; font-size: 1rem;`,
-    imageIcon: `background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; width: 100%;`,
+    imageIcon: `width: 100%;`, //background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; 
     imageIcons: {
       damage: `https://s3.amazonaws.com/files.d20.io/images/306656028/gtPy6tdbegC9QOtDd1nf6Q/original.png`,
       damageHalf: ``,
@@ -1899,8 +1899,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
       // !token-mod --set bar1_value|-[[floor(query*17)]]!
     }
-    _getImageIcon(buttonName) {
-      return `https://raw.githubusercontent.com/ooshhub/autoButtons/main/assets/imageIcons/${buttonName}.png`.replace(/%/g, 'P');
+    _getImageIcon(buttonName, cacheBust) {
+      return cacheBust ?
+        `https://raw.githubusercontent.com/ooshhub/autoButtons/main/assets/imageIcons/${buttonName}.png?${Math.floor(Math.random()*1000000000)}`.replace(/%/g, 'P')
+        : `https://raw.githubusercontent.com/ooshhub/autoButtons/main/assets/imageIcons/${buttonName}.png`.replace(/%/g, 'P');
       // May need to switch to this if images move
       // return styles.imageIcons[buttonName];
     }
@@ -1931,7 +1933,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``,
         buttonHref = `!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}`,
         useImageIcon = this._Config.getSetting('imageIcons') && btn.default,
-        buttonContent = useImageIcon ? `<a href="${buttonHref}" style="${styles.imageIcon}"><img src="${this._getImageIcon(btn.name)}"/></a>`
+        buttonContent = useImageIcon ? `<a href="${buttonHref}" style="${styles.buttonShared}"><img src="${this._getImageIcon(btn.name, true)}" style="${styles.imageIcon}"/></a>`
           : `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style}">${btn.content}</a>`,
         buttonContent2 = useImageIcon ? ``
           : btn.content2 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style2}">${btn.content2}</a>` : ``,
