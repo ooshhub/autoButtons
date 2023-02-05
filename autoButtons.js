@@ -1,10 +1,13 @@
 /* globals state log on sendChat playerIsGM findObjs */ //eslint-disable-line
+var API_Meta = API_Meta || {};
+API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
+{ try { throw new Error(''); } catch (e) { API_Meta.autoButtons.offset = (parseInt(e.stack.split(/\n/)[1].replace(/^.*:(\d+):.*$/, '$1'), 10) - (13)); } }
 
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.7.2`,
-    debugLevel = 2;
+    scriptVersion = `0.8.0`,
+    debugLevel = 1;
   let undoUninstall = null,
     cacheBusted = false;
 
@@ -28,7 +31,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         customButtons: {}
       },
       settings: {
-        // 0.6.x => 0.7.0 Setting additions
+        // 0.6.x => 0.8.0 Setting additions
         imageIcons: {
           type: 'boolean',
           default: false,
@@ -2209,3 +2212,5 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
   on('ready', startScript);
 
 })();
+{ try { throw new Error(''); } catch (e) { API_Meta.autoButtons.lineCount = (parseInt(e.stack.split(/\n/)[1].replace(/^.*:(\d+):.*$/, '$1'), 10) - API_Meta.autoButtons.offset); } }
+/* */
