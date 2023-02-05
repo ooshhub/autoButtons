@@ -5,9 +5,13 @@
 For documentation and support please visit Roll20:
 ### [autoButtons thread on Roll20](https://app.roll20.net/forum/permalink/10766392/)
 
+## v0.8.x:
+### Changes:
+- Added API meta data
+- Cleaned up code
+- Submitted to one-click
 
-## v0.7.0:
-
+## v0.7.x:
 ### Features:
 - Queries can be used to perform a final operation on results before applying to token
 - Buttons can be cloned and renamed
