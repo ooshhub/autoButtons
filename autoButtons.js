@@ -6,7 +6,7 @@ API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.8.0`,
+    scriptVersion = `0.8.1`,
     debugLevel = 1;
   let undoUninstall = null,
     cacheBusted = false;
@@ -777,7 +777,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
      * @param {any} input 
      * @returns {bool}
      */
-    static isObj(input) { return (typeof(input) === 'object' && input.constructor.name === 'Object') ? true : false }
+    static isObj(input) {
+      return (typeof(input) === 'object' && (!input.constructor || !input.constructor.name || input.constructor.name === 'Object')) ? true : false;
+    }
 
     static copyObj(inputObj) { return (typeof inputObj !== 'object') ? null : JSON.parse(JSON.stringify(inputObj)); }
 
