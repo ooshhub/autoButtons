@@ -1,4 +1,4 @@
-/* globals state log on sendChat playerIsGM findObjs */ //eslint-disable-line
+/* globals state log on sendChat playerIsGM findObjs ZeroFrame */ //eslint-disable-line
 var API_Meta = API_Meta || {};
 API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
 { try { throw new Error(''); } catch (e) { API_Meta.autoButtons.offset = (parseInt(e.stack.split(/\n/)[1].replace(/^.*:(\d+):.*$/, '$1'), 10) - (13)); } }
@@ -6,8 +6,8 @@ API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.8.1`,
-    debugLevel = 1;
+    scriptVersion = `0.9.0`,
+    debugLevel = 3;
   let undoUninstall = null,
     cacheBusted = false;
 
@@ -31,59 +31,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         customButtons: {}
       },
       settings: {
-        // 0.6.x => 0.8.0 Setting additions
-        imageIcons: {
-          type: 'boolean',
-          default: true,
-          name: `Image Icons`,
-          description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
-          menuAction: `$--imageicon`,
-        },
-        darkMode: {
-          type: 'boolean',
-          default: false,
-          name: `Dark Mode`,
-          description: `Palette change for the button bar`,
-          menuAction: `$--darkMode`,
-        },
-        multiattack: {
-          type: 'boolean',
-          default: false,
-          name: `Multiattack`,
-          description: `Attempt to link the button bar label to the source attack for easy repeat rolls. 5e only.`,
-          menuAction: `$--multiattack`,
-        },
-        allowNegatives: {
-          type: 'boolean',
-          default: false,
-          name: `Allow negatives`,
-          description: `Allow final results to be negative. This can cause healing to cause damage, or damage to heal`,
-          menuAction: `$--negatives`,
-        },
-        autosort: {
-          type: 'boolean',
-          default: false,
-          name: `Sort buttons`,
-          description: `Auto sort buttons by unicode order`,
-          menuAction: `$--autosort`,
-        },
-        autohide: {
-          type: 'boolean',
-          default: true,
-          name: `Autohide buttons`,
-          description: `Autohide buttons with 0 reported damage`,
-          menuAction: `$--autohide`,
-        },
-        report: {
-          type: 'string',
-          range: [ 'off', 'gm', 'control', 'all' ],
-          rangeLabels: [ 'Off', 'GM', 'Character', 'Public' ],
-          validate: function(v) { return this.range.find(r => r.toLowerCase() === v.toLowerCase()) },
-          default: 'Off',
-          name: `Report changes`,
-          description: `Report hitpoint changes to chat`,
-          menuAction: `$--report`,
-        },
         ...defaultScriptSettings,
       },
     });
@@ -796,7 +743,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       return objRef;
     }
 
-    // If value exists in array, it will be removed, otherwise it will be added. No validation done. Does not mutate the original.
+    // If value exists in array, it will be removed, otherwise it will be added. No validation done.
     static modifyArray(targetArray, newValue) { 
       if (!Array.isArray(targetArray || newValue == null)) return { err: `modifyArray error, bad parameters` };
       if (targetArray.includes(newValue)) {
@@ -817,7 +764,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
      */
     static filterAndMutate(inputArray, predicate) {
       if (typeof(predicate) !== 'function' || !Array.isArray(inputArray)) {
-        debug.error(`filterMutate requires an array and a predicate function.`);
+        debug.error(`filterAndMutate requires an array and a predicate function.`);
         return false;
       }
       for (let i=inputArray.length-1; i>=0; i--) {
@@ -894,6 +841,83 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       return attackRowId ? `&commat;&lcub;${characterName}|repeating_npcaction_${attackRowId}_rollbase&rcub;` : null;
       // const targetRollAttribute = findObjs({ type: 'attribute', characterid: char.id, name: `repeating_npcaction_${attackRowId}_rollbase` })[0];
       // if (targetRollAttribute) return targetRollAttribute.get('current');
+    }
+  }
+
+  /**
+   * MATH-OPS - Transform autoButtons math strings and damage objects for MathOps API
+   */
+  class MathOpsTransformer {
+    constructor() {
+      throw new Error(`${this.constructor.name} cannot be instantiated.`);
+    }
+
+    static rxKeyDigitReplacer = /(damage||crit)\.(\w+)/;
+    static replacers = {
+      0: 'Zero',
+      1: 'One',
+      2: 'Two',
+      3: 'Three',
+      4: 'Four',
+      5: 'Five',
+      6: 'Six',
+      7: 'Seven',
+      8: 'Eight',
+      9: 'Nine',
+    };
+    static prefixJoin = 'X';
+
+    /**
+     * Replace all digits in a string with alpha characters
+     * @param {string} inputString 
+     * @returns {string}
+     */
+    static digitReplacer(inputString) {
+      if (!/\d/.test(inputString)) return inputString;
+      let modifiedString = inputString;
+      for (const digit in this.replacers) {
+        modifiedString = modifiedString.replace(digit, this.replacers[digit]);
+      }
+      return modifiedString;
+    }
+
+    /**
+     * Transform the keynames in the damage object to make them MathOps-friendly
+     * @param {object} damageObject - autoButtons damage object with damage values
+     * @param {string} prefix - prefix string, damage or crit
+     * @returns {object} - autoButtons damage object with numerals replaced with alpha character in key names
+     */
+    static transformDamageObject(damageObject, prefix) {
+      return Object.entries(damageObject).reduce((output, [ key, value ]) => {
+        const newKey = `${prefix}${this.prefixJoin}${this.digitReplacer(key)}`;
+        output[newKey] = value;
+        return output;
+      }, {});
+    }
+
+    /**
+     * Transform a math string for MathOps - same transform as the damage objects
+     * @param {string} mathString - autoButtons math string
+     * @returns {string} - math string with key references transformed to remove digits
+     */
+    static transformMathString(mathString) {
+      const doTransform = (match, prefix, keyName) => {
+        return `${prefix}${this.prefixJoin}${this.digitReplacer(keyName)}`;
+      }
+      return mathString.replace(this.rxKeyDigitReplacer, doTransform)
+    }
+
+    /**
+     * Transform the damage and crit objects for use with MathOps
+     * @param {object} damageObject - autoButtons damage object with damage values
+     * @param {object} critObject - autoButtons crit object with damage values
+     * @returns {object} - flattened object with all numerals in keynames replaced with alpha characters, prefixed with parent object name
+     */
+    static transformMathOpsPayload(damageObject, critObject = {}) {
+      return {
+        ...this.transformDamageObject(damageObject, 'damage'),
+        ...this.transformDamageObject(critObject, 'crit'),
+      }
     }
   }
 
@@ -1354,6 +1378,58 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       description: `CSS to bump the button container up in chat to save some space`,
       menuAction: `$--bump`,
     },
+    imageIcons: {
+      type: 'boolean',
+      default: true,
+      name: `Image Icons`,
+      description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
+      menuAction: `$--imageicon`,
+    },
+    darkMode: {
+      type: 'boolean',
+      default: false,
+      name: `Dark Mode`,
+      description: `Palette change for the button bar`,
+      menuAction: `$--darkMode`,
+    },
+    multiattack: {
+      type: 'boolean',
+      default: false,
+      name: `Multiattack`,
+      description: `Attempt to link the button bar label to the source attack for easy repeat rolls. 5e only.`,
+      menuAction: `$--multiattack`,
+    },
+    allowNegatives: {
+      type: 'boolean',
+      default: false,
+      name: `Allow negatives`,
+      description: `Allow final results to be negative. This can cause healing to cause damage, or damage to heal`,
+      menuAction: `$--negatives`,
+    },
+    autosort: {
+      type: 'boolean',
+      default: false,
+      name: `Sort buttons`,
+      description: `Auto sort buttons by unicode order`,
+      menuAction: `$--autosort`,
+    },
+    autohide: {
+      type: 'boolean',
+      default: true,
+      name: `Autohide buttons`,
+      description: `Autohide buttons with 0 reported damage`,
+      menuAction: `$--autohide`,
+    },
+    report: {
+      type: 'string',
+      range: [ 'off', 'gm', 'control', 'all' ],
+      rangeLabels: [ 'Off', 'GM', 'Character', 'Public' ],
+      validate: function(v) { return this.range.find(r => r.toLowerCase() === v.toLowerCase()) },
+      default: 'Off',
+      name: `Report changes`,
+      description: `Report hitpoint changes to chat`,
+      menuAction: `$--report`,
+    },
     templates: {
       type: 'object',
       names: {
@@ -1775,45 +1851,38 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       return output;
     }
 
-    static parseMathString(inputString) {
-      // debug.info(inputString);
+    static validateMathString(inputString) {
+      debug.info(inputString);
       inputString = `${inputString}`;
       let err = '';
       // Default buttons will send in a JS function, remove the declaration part
       inputString = inputString.replace(/^.*?=>\s*/, '');
-
-      // Convert to JS
-      const formulaReplacer = {
-        '$1Math.floor': /([^.]|^)floor/ig,
-        '$1Math.ceil': /([^.]|^)ceil/ig,
-        '$1Math.round': /([^.]|^)round/ig,
-        '($1||0)': /((damage|crit)\.\w+)/ig,
-      }
-      // Very basic security, at least stops a `state = null`
-      const disallowed = [ /=/g, /\bstate\b/gi ];
-
-      disallowed.forEach(rx => { if (rx.test(inputString)) err += `Disallowed value in math formula: "${`${rx}`.replace(/(\\\w|\/)/g, '')}"` });
       
       let newFormula = inputString;
-      for (let f in formulaReplacer) newFormula = newFormula.replace(formulaReplacer[f], f);
+      // for (let f in formulaReplacer) newFormula = newFormula.replace(formulaReplacer[f], f);
+      const mathOpsString = MathOpsTransformer.transformMathString(newFormula);
+      debug.info(mathOpsString);
 
       // Create a test object
       let damageKeys = inputString.match(/(damage|crit)\.(\w+)/g),
         testKeys = {};
       damageKeys = damageKeys ? damageKeys.map(k => k.replace(/^[^.]*\./, '')) : [];
       damageKeys.forEach(k => testKeys[k] = 5);
+      debug.log(testKeys);
+      const mathOpsKeys = MathOpsTransformer.transformMathOpsPayload(testKeys);
+      debug.info(mathOpsKeys);
 
-      let validate = false,
-        newFunc;
+      let validate = false;
       try {
-        newFunc = new Function(`damage`, `crit`, `return (${newFormula})`)
-        validate = isNaN(newFunc(testKeys, testKeys)) ? false : true;
+        const testResult = MathOps.MathProcessor({ code: mathOpsString, known: mathOpsKeys });
+        console.log(testResult);
+        validate = isNaN(testResult) ? false : true;
       } catch(e) { err += (`${scriptName}: formula failed validation`) }
 
       if (validate && !err) {
-        return newFunc;
+        return { result: mathOpsString };
       }	else {
-        return new Error(err);
+        return { err };
       }
     }
     addButton(buttonData={}) {
@@ -1834,11 +1903,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (buttonData[k] != null) {
           if (k === 'default') return; // Don't allow reassignment of 'default' property
           else if (k === 'math') {
-            const newMath = ButtonManager.parseMathString(buttonData[k]);
-            if (newMath.err) return newMath;
+            const { result, err } = ButtonManager.validateMathString(buttonData[k]);
+            if (err) return { err };
             else {
-              this._buttons[buttonData.name].mathString = buttonData[k];
-              this._buttons[buttonData.name].math = newMath;
+              // TODO: Store the new mathString, update the buttons to only use Math for default buttons
+              // otherwise use MathOps.MathProcessor(mathstring, rollObjects);
+              this._buttons[buttonData.name].mathString = result;
+              // this._buttons[buttonData.name].math = MathOps.MathProcessor();
               modded.push(k);
             }
           }
@@ -1917,6 +1988,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       // return styles.imageIcons[buttonName];
     }
     createApiButton(buttonName, damage, crit) {
+      debug.info(this._buttons[buttonName]);
       const btn = this._buttons[buttonName],
         autoHide = this._Config.getSetting(`autohide`),
         bar = this._Config.getSetting('hpBar'),
@@ -1935,7 +2007,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         debug.error(`${scriptName}: error creating API button ${buttonName}`);
         return ``;
       }
-      const modifier = btn.math(damage, crit),
+      debug.warn(btn.math.toString());
+      const modifier = this.resolveButtonMath(btn, damage, crit),
         tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
         setWithQuery = queryString ? `&lsqb;&lsqb;${boundingPre}${queryString.replace(/%%MODIFIER%%/g, Math.abs(modifier))}${boundingPost}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
         tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
@@ -1962,6 +2035,22 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         const { success, msg, err } = this._Config.changeSetting('enabledButtons', validButtons);
         if (success && msg) new ChatDialog({ content: msg, title: 'Buttons Changed' });
         else if (err) new ChatDialog({ content: err }, 'error');
+      }
+    }
+    resolveButtonMath(button, damage, crit) {
+      console.warn(button, damage, crit);
+      console.warn(button.math);
+      const buttonType = button.constructor.name;
+      if (buttonType === 'CustomButton') {
+        console.warn(buttonType);
+        console.info(button.mathString, MathOpsTransformer.transformMathOpsPayload(damage, crit));
+        console.warn(button.math(button.mathString, MathOpsTransformer.transformMathOpsPayload(damage, crit)));
+        const result = MathOps.MathProcessor({ code: button.mathString, known: MathOpsTransformer.transformMathOpsPayload(damage, crit) });
+        console.warn(result);
+        return result;
+      }
+      else if (buttonType === 'Button') {
+        return button.math(damage, crit);
       }
     }
   }
@@ -2020,12 +2109,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
    */
   class CustomButton extends Button {
     constructor(buttonData={}) {
-      debug.log(buttonData);
+      debug.info(buttonData);
       if (!buttonData.math && !buttonData.mathString) return { err: `Button must contain a function in 'math' key.` };
+      const { result, err } = ButtonManager.validateMathString(buttonData.mathString);
+      if (err) return { err };
       Object.assign(buttonData, {
         name: buttonData.name || 'newCustomButton',
-        mathString: buttonData.mathString || buttonData.math.toString(),
-        math: ButtonManager.parseMathString(buttonData.mathString || buttonData.math.toString()),
+        mathString: result,
+        math: (code, known) => MathOps.MathProcessor({ code, known }),
         style: buttonData.style || 'full',
         query: buttonData.query || ``,
         default: false,
@@ -2145,7 +2236,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           </div>`;
       },
       table: ({ title, content, footer, borders }) => {
-        // debug.log(content);
         const rowBorders = borders && borders.row ? styles.table.rowBorders : ``;
         const msgArray = content ? Helpers.toArray(content) : [],
           columns = msgArray[0].length || 1,
@@ -2213,3 +2303,318 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 })();
 { try { throw new Error(''); } catch (e) { API_Meta.autoButtons.lineCount = (parseInt(e.stack.split(/\n/)[1].replace(/^.*:(\d+):.*$/, '$1'), 10) - API_Meta.autoButtons.offset); } }
 /* */
+
+const MathOps = (() => {
+  const apiproject = 'MathOps';
+  const version = '1.0.7';
+  const schemaVersion = 0.1;
+  API_Meta[apiproject] = API_Meta[apiproject] || {};
+  API_Meta[apiproject].version = version;
+  const vd = new Date(1677072709240);
+  const versionInfo = () => {
+      log(`\u0166\u0166 ${apiproject} v${API_Meta[apiproject].version}, ${vd.getFullYear()}/${vd.getMonth() + 1}/${vd.getDate()} \u0166\u0166 -- offset ${API_Meta[apiproject].offset}`);
+      if (!state.hasOwnProperty(apiproject) || state[apiproject].version !== schemaVersion) {
+          log(`  > Updating ${apiproject} Schema to v${schemaVersion} <`);
+          switch (state[apiproject] && state[apiproject].version) {
+
+              case 0.1:
+              /* break; // intentional dropthrough */ /* falls through */
+
+              case 'UpdateSchemaVersion':
+                  state[apiproject].version = schemaVersion;
+                  break;
+
+              default:
+                  state[apiproject] = {
+                      version: schemaVersion,
+                  };
+                  break;
+          }
+      }
+  };
+  const logsig = () => {
+      // initialize shared namespace for all signed projects, if needed
+      state.torii = state.torii || {};
+      // initialize siglogged check, if needed
+      state.torii.siglogged = state.torii.siglogged || false;
+      state.torii.sigtime = state.torii.sigtime || Date.now() - 3001;
+      if (!state.torii.siglogged || Date.now() - state.torii.sigtime > 3000) {
+          state.torii.siglogged = true;
+          state.torii.sigtime = Date.now();
+      }
+      return;
+  };
+
+  const mathprocessor = (() => {
+      const tokenize = code => {
+          let results = [];
+          let tokenRegExp = /\s*([A-Za-z\s'"`]+|(?:-(?<!(?:\d|[A-Za-z\s'"`]|\))-))?[0-9]+(\.[0-9]+)?|\S)\s*/g;
+
+          let m;
+          while ((m = tokenRegExp.exec(code)) !== null)
+              results.push(m[1]);
+          return results;
+      };
+
+      const isNumber = token => {
+          return token !== undefined && token.match(/^-?[0-9]*.?[0-9]+$/) !== null;
+      };
+
+      const isName = token => {
+          return token !== undefined && token.match(/^[A-Za-z\s'"`]+$/) !== null;
+      };
+
+      const parse = o => {
+          let tokens = tokenize(o.code);
+          let position = 0;
+          const peek = () => {
+              return tokens[position];
+          };
+          const peek1 = () => {
+              if (position < tokens.length - 1) {
+                  return tokens[position + 1];
+              }
+          };
+
+          const consume = token => {
+              position++;
+          };
+
+          const parsePrimaryExpr = () => {
+              let t = peek();
+
+              if (isNumber(t)) {
+                  consume(t);
+                  return { type: "number", value: t };
+              } else if (isName(t)) {
+                  if (funcbank.hasOwnProperty(t.toLowerCase()) && peek1() === '(') {
+                      let f = t.toLowerCase();
+                      let p = [];
+                      consume(t);
+                      consume('(');
+                      while (peek() !== ')') {
+                          if (peek() === ',') {
+                              consume(',');
+                          } else {
+                              p.push(parseExpr());
+                          }
+                      }
+                      if (peek() !== ")") throw "Expected )";
+                      consume(')');
+                      return { type: 'func', func: f, params: p };
+                  } else {
+                      consume(t);
+                      return { type: "name", id: t };
+                  }
+              } else if (t === "(") {
+                  consume(t);
+                  let expr = parseExpr();
+                  if (peek() !== ")") throw "Expected )";
+                  consume(")");
+                  return expr;
+              } else {
+                  throw "Expected a number, a variable, or parentheses";
+              }
+          };
+
+          const parseMulExpr = () => {
+              let expr = parsePrimaryExpr();
+              let t = peek();
+              while (t === "*" || t === "/" || t === "%") {
+                  consume(t);
+                  let rhs = parsePrimaryExpr();
+                  expr = { type: t, left: expr, right: rhs };
+                  t = peek();
+              }
+              return expr;
+          };
+          const parseExpr = () => {
+              let expr = parseMulExpr();
+              let t = peek();
+              while (t === "+" || t === "-") {
+                  consume(t);
+                  let rhs = parseMulExpr();
+                  expr = { type: t, left: expr, right: rhs };
+                  t = peek();
+              }
+              return expr;
+          };
+          let result = parseExpr();
+          if (position !== tokens.length) throw "Unexpected '" + peek() + "'";
+          return result;
+      };
+      const formatReturn = (a, d) => {
+          switch (d) {
+              case 'roll':
+                  return `[[${a.join('+')}]]`;
+              default:
+                  return a.join(d);
+          }
+      };
+      const funcbank = {
+          abs: Math.abs,
+          min: Math.min,
+          max: Math.max,
+          maxn: (n, d, ...i) => {
+              if (!isNaN(d)) [i, d] = [[d, ...i], ','];
+              if (n > i.length) {
+                  return formatReturn(i, d);
+              }
+              return formatReturn(
+                  i.slice().sort((a, b) => { return b - a; }).slice(0, n),
+                  d);
+          },
+          minn: (n, d, ...i) => {
+              if (!isNaN(d)) [i, d] = [[d, ...i], ','];
+              if (n > i.length) {
+                  return formatReturn(i, d);
+              }
+              return formatReturn(
+                  i.slice().sort((a, b) => { return a - b; }).slice(0, n),
+                  d);
+          },
+          acos: Math.acos,
+          acosh: Math.acosh,
+          asin: Math.asin,
+          asinh: Math.asinh,
+          atan: Math.atan,
+          atanh: Math.atanh,
+          atantwo: Math.atan2,
+          cbrt: Math.cbrt,
+          ceiling: Math.ceil,
+          cos: Math.cos,
+          cosh: Math.cosh,
+          exp: Math.exp,
+          expmone: Math.expm1,
+          floor: Math.floor,
+          hypot: Math.hypot,
+          log: Math.log,
+          logonep: Math.log1p,
+          logten: Math.log10,
+          logtwo: Math.log2,
+          pow: (v, e = 1) => Math.pow(v, e),
+          rand: Math.random,
+          randb: (v1, v2) => { return Math.random() * (Math.max(v1, v2) - Math.min(v1, v2) + 1) + Math.min(v1, v2) },
+          randib: (v1, v2) => {
+              let min = Math.ceil(Math.min(v1, v2));
+              let max = Math.floor(Math.max(v1, v2));
+              return Math.floor(Math.random() * (max - min) + min);
+          },
+          randa: (...v) => v[Math.floor(Math.random() * v.length)],
+          round: (v, d = 0) => Math.round(v * 10 ** d) / 10 ** d,
+          sin: Math.sin,
+          sinh: Math.sinh,
+          sqrt: Math.sqrt,
+          tan: Math.tan,
+          tanh: Math.tanh,
+          trunc: Math.trunc
+      };
+      const knownbank = {
+          e: Math.E,
+          pi: Math.PI,
+          lntwo: Math.LN2,
+          lnten: Math.LN10,
+          logtwoe: Math.LOG2E,
+          logtene: Math.LOG10E
+      };
+      const isNum = (v) => +v === +v;
+      const typeprocessor = {
+          '-': (a, b) => { return isNum(a) && isNum(b) ? Number(a) - Number(b) : `${a}-${b}`; },
+          '+': (a, b) => { return isNum(a) && isNum(b) ? Number(a) + Number(b) : `${a}+${b}`; },
+          '/': (a, b) => { return isNum(a) && isNum(b) ? Number(a) / Number(b) : `${a}/${b}`; },
+          '*': (a, b) => { return isNum(a) && isNum(b) ? Number(a) * Number(b) : `${a}*${b}`; },
+          '%': (a, b) => { return isNum(a) && isNum(b) ? Number(a) % Number(b) : `${a}%${b}`; }
+      };
+      const isString = (s) => 'string' === typeof s || s instanceof String;
+      const evalops = o => {
+          if (!o.code || !isString(o.code)) return;
+          o.known = o.known || {};
+          Object.assign(o.known, knownbank);
+          try {
+              const getVal = t => {
+                  switch (t.type) {
+                      case 'number':
+                          return t.value;
+                      case 'name':
+                          return o.known[t.id.trim()] || t.id;
+                      case 'func':
+                          return funcbank[t.func](...t.params.map(p => getVal(p)));
+                      default:
+                          return typeprocessor[t.type](getVal(t.left), getVal(t.right));
+                  }
+              };
+              return getVal(parse(o));
+          } catch (error) {
+              return { message: error };
+          }
+      };
+      return evalops;
+  })();
+  const mathrx = /(\()?{&\s*math\s*([^}]+)\s*}((?<=\({&\s*math\s*([^}]+)\s*})\)|\1)/g;
+
+  const testConstructs = c => {
+      let result = mathrx.test(c);
+      mathrx.lastIndex = 0;
+      return result;
+  };
+  const handleInput = (msg, msgstate = {}) => {
+      let funcret = { runloop: false, status: 'unchanged', notes: '' };
+      if (msg.type !== 'api' || !testConstructs(msg.content)) return funcret;
+      if (!Object.keys(msgstate).length && scriptisplugin) return funcret;
+      let status = [];
+      let notes = [];
+      msg.content = msg.content.replace(mathrx, (m, padding, g1) => {
+          g1 = g1.replace(/\$\[\[(\d+)]]/g, (m1, roll) => {
+              let rollval;
+              if (msg.parsedinline) {
+                  rollval = msg.parsedinline[roll].value;
+              } else if (msg.inlinerolls && msg.inlinerolls[roll]) {
+                  rollval = msg.inlinerolls[roll].results.total;
+              } else {
+                  rollval = 0;
+              }
+              return rollval;
+          });
+          let result = mathprocessor({ code: g1, known: msg.variables || {} });
+          if (result.message) { // error
+              status.push('unresolved');
+              notes.push(result.message);
+              return m;
+          } else {
+              status.push('changed');
+              return result;
+          }
+      });
+      funcret.runloop = (status.includes('changed') || status.includes('unresolved'));
+      funcret.status = status.reduce((m, v) => {
+          switch (m) {
+              case 'unchanged':
+                  m = v;
+                  break;
+              case 'changed':
+                  m = v === 'unresolved' ? v : m;
+                  break;
+              case 'unresolved':
+                  break;
+          }
+          return m;
+      });
+      funcret.notes = notes.join('<br>');
+      return funcret;
+  };
+
+  let scriptisplugin = false;
+  const mathops = (m, s) => handleInput(m, s);
+  on('chat:message', handleInput);
+  on('ready', () => {
+      versionInfo();
+      logsig();
+      scriptisplugin = (typeof ZeroFrame !== `undefined`);
+      if (typeof ZeroFrame !== 'undefined') {
+          ZeroFrame.RegisterMetaOp(mathops, { priority: 55, handles: ['math'] });
+      }
+  });
+  return {
+      MathProcessor: mathprocessor
+  };
+})();
