@@ -1,4 +1,4 @@
-/* globals state log on sendChat playerIsGM findObjs ZeroFrame */ //eslint-disable-line
+/* globals state log on sendChat playerIsGM findObjs ZeroFrame MathOps */ //eslint-disable-line
 var API_Meta = API_Meta || {};
 API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
 { try { throw new Error(''); } catch (e) { API_Meta.autoButtons.offset = (parseInt(e.stack.split(/\n/)[1].replace(/^.*:(\d+):.*$/, '$1'), 10) - (13)); } }
@@ -6,8 +6,8 @@ API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.9.0`,
-    debugLevel = 3;
+    scriptVersion = `0.8.9`,
+    debugLevel = 1;
   let undoUninstall = null,
     cacheBusted = false;
 
@@ -48,90 +48,25 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       options: defaultCliOptions,
     });
     Services.register({ serviceName: 'cli', serviceReference: CLI });
-    // v0.6.x => 0.7.0 CLI additions
-    CLI.addOptions([
-      {
-        name: 'imageIcons',
-        rx: /^imagei/i,
-        description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('imageIcons', args) }
-      },
-      {
-        name: `cloneButton`,
-        rx: /^clonebut/i,
-        description: `Clone a button`,
-        requiredServices: { buttons: 'ButtonManager' },
-        action: function(args) {
-          const parts = args.trim().split(/\s+/g),
-            originalButtonName = parts[0],
-            cloneName = parts[1];
-          return this.buttons.cloneButton(originalButtonName, cloneName);
-        }
-      },
-      {
-        name: `renameButton`,
-        rx: /^renamebut/i,
-        description: `Rename a button (Custom buttons only)`,
-        requiredServices: { buttons: 'ButtonManager' },
-        action: function(args) {
-          const parts = args.trim().split(/\s+/g),
-            originalButtonName = parts[0],
-            newName = parts[1];
-          return this.buttons.renameButton(originalButtonName, newName);
-        }
-      },
-      {
-        name: 'darkMode',
-        rx: /^dark/i,
-        description: `Palette change for the button bar`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('darkMode', args) }
-      },
-      {
-        name: 'multiattack',
-        rx: /^multiat/i,
-        description: `Attempt to link the button bar label to the source attack for easy repeat rolls`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('multiattack', args) }
-      },
-      {
-        name: 'allowNegatives',
-        rx: /^negative/i,
-        description: `Allow final results to be negative`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('allowNegatives', args) }
-      },
-      {
-        name: 'autosort',
-        rx: /^autosort/i,
-        description: `Auto sort buttons by unicode order`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('autosort', args) }
-      },
-      {
-        name: 'autohide',
-        rx: /^autohide/i,
-        description: `Autohide buttons with 0 reported damage`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('autohide', args) }
-      },
-      {
-        name: 'report',
-        rx: /^report/i,
-        description: `Change settings for reporting HP changes to chat`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) {
-          const newVal = `${args}`.replace(/\W/g, '').toLowerCase();
-          return this.config.changeSetting('report', newVal);
-        }
-      },
-    ]);
+
+    const checkDependencies = async () => {
+      let err;
+      try {
+        err = typeof(MathOps) !== 'object' || typeof(TokenMod) !== 'object'
+          ? `${scriptName}: requires TokenMod and MathOps`
+          : typeof(MathOps.MathProcessor) !== 'function'
+            ? `${scriptName}: a newer version of MathOps is required.`
+            : null;
+      }
+      catch(e) { err = `${scriptName} dependencies could not be resolved - MathOps and TokenMod are required.` }
+      if (err) new ChatDialog({ title: `Fatal Error - ${scriptName} exiting...`, content: err }, 'error');
+      return !err;
+    }
 
     // Check install and version
-    const checkInstall = () => {
+    const checkInstall = async () => {
       let firstTimeSetup;
-      setTimeout(() => { if (!/object/i.test(typeof(['token-mod']))) return sendChat(scriptName, `/w gm <div style="${styles.error}">tokenMod not found - this script requires tokenMod to function! Aborting init...</div>`), 500 });
+      if (!(await checkDependencies())) return;
       if (!state[scriptName] || !state[scriptName].version ) {
         log(`autoButtons: first time setup...`);
         firstTimeSetup = 1;
@@ -168,12 +103,22 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (v < `0.7.0`) {
           // Two default buttons renamed - damageCrit => crit, and damageFull => damage
           const currentShownButtons = state[scriptName].settings.enabledButtons;
-          debug.warn(currentShownButtons);
+          debug.log(currentShownButtons);
           if (currentShownButtons) {
             const { oldDamage, oldCrit } = currentShownButtons.reduce((out, v, i) => v === 'damageCrit' ? { ...out, oldCrit: i } : v === 'damageFull' ? { ...out, oldDamage: i } : out, {});
             if (oldDamage != null) currentShownButtons[oldDamage] = 'damage';
             if (oldCrit != null) currentShownButtons[oldCrit] = 'crit';
-            debug.warn(state[scriptName].settings.enabledButtons);
+            debug.log(state[scriptName].settings.enabledButtons);
+          }
+        }
+        if (v < `0.8.9`) {
+          log(`Backing up math strings on custom buttons...`);
+          if (state[scriptName].store && state[scriptName].store.customButtons) {
+            for (const button in state[scriptName].store.customButtons) {
+              if (state[scriptName].store.customButtons[button].mathString) {
+                state[scriptName].store.customButtons[button].mathBackup = state[scriptName].store.customButtons[button].mathString;
+              }
+            }
           }
         }
         state[scriptName].version = Config.version;
@@ -183,7 +128,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (
         (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
         (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
-          // debug.log(`Loading preset...`);
           if (firstTimeSetup) Config.loadPreset();
           else new ChatDialog({ title: `${scriptName} Install`, content:`No roll templates registered, or no buttons enabled. AutoButtons will not currently do anything. If you're still setting things up, this is probably ok, otherwise you may want to <a href="${styles.components.confirmApiCommand('reset sheet settings')} --reset" style="${styles.list.controls.create}">Reset</a> to default sheet settings.` }, 'error');
       }
@@ -192,7 +136,15 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       for (const button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].default = false;
         const { err } = ButtonStore.addButton(state[scriptName].store.customButtons[button]);
-				if (err) debug.error(`${err}`);
+        const errorString = `${err}`;
+				if (err) {
+          new ChatDialog({ title: `${scriptName}: invalid button **${button}**`, content: errorString }); // **${state[scriptName].store.customButtons[button].name}** - ${err}
+          const recoverButton = { ...state[scriptName].store.customButtons[button], mathString: '0' };
+          const { err } = ButtonStore.addButton(recoverButton);
+          if (!err) {
+            new ChatDialog({ title: `${scriptName}: recovered button`, content: `Button math was cleared, the problem math string was ${recoverButton.mathBackup}.` });
+          }
+        }
       }
       const allButtons = ButtonStore.getButtonNames(),
         enabledButtons = Config.getSetting('enabledButtons');
@@ -270,7 +222,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
   /**
    * SHEET PRESET DATA
    */
-  // TODO: Replace with PresetController class ???
   const preset = {
     dnd5e_r20: {
       sheet: ['dnd5e_r20'],
@@ -1200,8 +1151,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           if (this.buttons.getButtonNames().includes(buttonName)) return { err: `Invalid button name, already in use: "${buttonName}"` }
           if (!buttonData.math) return { err: `Button must have an associated function, {{math=...}}` }
           buttonData.default = false;
-          // construct query if provided
-          // if (buttonData.query) buttonData.query = Button.splitAndEscapeQuery(buttonData.query);
+          buttonData.mathString = buttonData.math;
           const result = this.buttons.addButton(buttonData);
           if (result.success) {
             this.buttons.showButton(buttonName);
@@ -1266,6 +1216,82 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       description: `Whisper the buttons to GM, or post publicly`,
       requiredServices: { config: 'ConfigController' },
       action: function (args) { return this.config.changeSetting('gmOnly', args) }
+    },
+    {
+      name: 'imageIcons',
+      rx: /^imagei/i,
+      description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('imageIcons', args) }
+    },
+    {
+      name: `cloneButton`,
+      rx: /^clonebut/i,
+      description: `Clone a button`,
+      requiredServices: { buttons: 'ButtonManager' },
+      action: function(args) {
+        const parts = args.trim().split(/\s+/g),
+          originalButtonName = parts[0],
+          cloneName = parts[1];
+        return this.buttons.cloneButton(originalButtonName, cloneName);
+      }
+    },
+    {
+      name: `renameButton`,
+      rx: /^renamebut/i,
+      description: `Rename a button (Custom buttons only)`,
+      requiredServices: { buttons: 'ButtonManager' },
+      action: function(args) {
+        const parts = args.trim().split(/\s+/g),
+          originalButtonName = parts[0],
+          newName = parts[1];
+        return this.buttons.renameButton(originalButtonName, newName);
+      }
+    },
+    {
+      name: 'darkMode',
+      rx: /^dark/i,
+      description: `Palette change for the button bar`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('darkMode', args) }
+    },
+    {
+      name: 'multiattack',
+      rx: /^multiat/i,
+      description: `Attempt to link the button bar label to the source attack for easy repeat rolls`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('multiattack', args) }
+    },
+    {
+      name: 'allowNegatives',
+      rx: /^negative/i,
+      description: `Allow final results to be negative`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('allowNegatives', args) }
+    },
+    {
+      name: 'autosort',
+      rx: /^autosort/i,
+      description: `Auto sort buttons by unicode order`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('autosort', args) }
+    },
+    {
+      name: 'autohide',
+      rx: /^autohide/i,
+      description: `Autohide buttons with 0 reported damage`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('autohide', args) }
+    },
+    {
+      name: 'report',
+      rx: /^report/i,
+      description: `Change settings for reporting HP changes to chat`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) {
+        const newVal = `${args}`.replace(/\W/g, '').toLowerCase();
+        return this.config.changeSetting('report', newVal);
+      }
     },
     {
       name: 'settings',
@@ -1854,12 +1880,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     static validateMathString(inputString) {
       debug.info(inputString);
       inputString = `${inputString}`;
-      let err = '';
+
       // Default buttons will send in a JS function, remove the declaration part
       inputString = inputString.replace(/^.*?=>\s*/, '');
       
       let newFormula = inputString;
-      // for (let f in formulaReplacer) newFormula = newFormula.replace(formulaReplacer[f], f);
       const mathOpsString = MathOpsTransformer.transformMathString(newFormula);
       debug.info(mathOpsString);
 
@@ -1872,23 +1897,27 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const mathOpsKeys = MathOpsTransformer.transformMathOpsPayload(testKeys);
       debug.info(mathOpsKeys);
 
-      let validate = false;
+      let error;
       try {
         const testResult = MathOps.MathProcessor({ code: mathOpsString, known: mathOpsKeys });
-        console.log(testResult);
-        validate = isNaN(testResult) ? false : true;
-      } catch(e) { err += (`${scriptName}: formula failed validation`) }
-
-      if (validate && !err) {
-        return { result: mathOpsString };
-      }	else {
-        return { err };
+        debug.info(testResult);
+        if (testResult.message) {
+          error = testResult.message;
+        }
+        else if (isNaN(testResult)) {
+          error = `The supplied math did not return a number: ${inputString}`;
+        }
       }
+      catch(e) { error = `Math failed validation - ${e}`; }
+
+      return error
+        ? { success: false, err: error }
+        : { success: true, err: null }
     }
     addButton(buttonData={}) {
-      debug.info(buttonData);
       const newButton = buttonData.default === false ? new CustomButton(buttonData) : new Button(buttonData);
-      if (newButton.err) return { success: 0, err: newButton.err }
+      debug.warn(newButton);
+      if (newButton.err || !newButton.math) return { success: 0, err: newButton.err || `Button ${buttonData.name} could not be created.` }
       if (this._buttons[newButton.name]) return { success: 0, err: `Button "${newButton.name}" already exists` };
       this._buttons[newButton.name] = newButton;
       this.saveToStore();
@@ -1903,13 +1932,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (buttonData[k] != null) {
           if (k === 'default') return; // Don't allow reassignment of 'default' property
           else if (k === 'math') {
-            const { result, err } = ButtonManager.validateMathString(buttonData[k]);
-            if (err) return { err };
+            const { success, err } = ButtonManager.validateMathString(buttonData[k]);
+            if (!success) return { err };
             else {
-              // TODO: Store the new mathString, update the buttons to only use Math for default buttons
-              // otherwise use MathOps.MathProcessor(mathstring, rollObjects);
-              this._buttons[buttonData.name].mathString = result;
-              // this._buttons[buttonData.name].math = MathOps.MathProcessor();
+              this._buttons[buttonData.name].mathString = buttonData[k];
               modded.push(k);
             }
           }
@@ -1988,7 +2014,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       // return styles.imageIcons[buttonName];
     }
     createApiButton(buttonName, damage, crit) {
-      debug.info(this._buttons[buttonName]);
+      // debug.info(this._buttons[buttonName]);
       const btn = this._buttons[buttonName],
         autoHide = this._Config.getSetting(`autohide`),
         bar = this._Config.getSetting('hpBar'),
@@ -2007,7 +2033,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         debug.error(`${scriptName}: error creating API button ${buttonName}`);
         return ``;
       }
-      debug.warn(btn.math.toString());
       const modifier = this.resolveButtonMath(btn, damage, crit),
         tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
         setWithQuery = queryString ? `&lsqb;&lsqb;${boundingPre}${queryString.replace(/%%MODIFIER%%/g, Math.abs(modifier))}${boundingPost}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
@@ -2038,15 +2063,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
     }
     resolveButtonMath(button, damage, crit) {
-      console.warn(button, damage, crit);
-      console.warn(button.math);
       const buttonType = button.constructor.name;
       if (buttonType === 'CustomButton') {
-        console.warn(buttonType);
-        console.info(button.mathString, MathOpsTransformer.transformMathOpsPayload(damage, crit));
-        console.warn(button.math(button.mathString, MathOpsTransformer.transformMathOpsPayload(damage, crit)));
-        const result = MathOps.MathProcessor({ code: button.mathString, known: MathOpsTransformer.transformMathOpsPayload(damage, crit) });
-        console.warn(result);
+        debug.info(button.mathString, MathOpsTransformer.transformMathOpsPayload(damage, crit), MathOpsTransformer.transformMathString(button.mathString));
+        const result = MathOps.MathProcessor({ code: MathOpsTransformer.transformMathString(button.mathString), known: MathOpsTransformer.transformMathOpsPayload(damage, crit) });
+        debug.info(result);
         return result;
       }
       else if (buttonType === 'Button') {
@@ -2071,7 +2092,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         content2: buttonData.content2 || '',
         content3: buttonData.content3 || '',
         math: buttonData.math || null,
-        mathString: buttonData.mathString || buttonData.math.toString(),
+        mathString: buttonData.mathString,
         query: buttonData.query || ``,
         default: buttonData.default === false ? false : true,
       });
@@ -2110,13 +2131,16 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
   class CustomButton extends Button {
     constructor(buttonData={}) {
       debug.info(buttonData);
-      if (!buttonData.math && !buttonData.mathString) return { err: `Button must contain a function in 'math' key.` };
-      const { result, err } = ButtonManager.validateMathString(buttonData.mathString);
-      if (err) return { err };
+      if (!buttonData.mathString) return { err: `Button must contain a math string.` };
+      const { success, err } = ButtonManager.validateMathString(buttonData.mathString);
+      if (!success) {
+        debug.error('===>', err);
+        return { err };
+      }
       Object.assign(buttonData, {
         name: buttonData.name || 'newCustomButton',
-        mathString: result,
-        math: (code, known) => MathOps.MathProcessor({ code, known }),
+        mathString: buttonData.mathString,
+        math: (code, known) => MathOps.MathProcessor({ code: MathOpsTransformer.transformMathString(code), known }),
         style: buttonData.style || 'full',
         query: buttonData.query || ``,
         default: false,
@@ -2303,318 +2327,3 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 })();
 { try { throw new Error(''); } catch (e) { API_Meta.autoButtons.lineCount = (parseInt(e.stack.split(/\n/)[1].replace(/^.*:(\d+):.*$/, '$1'), 10) - API_Meta.autoButtons.offset); } }
 /* */
-
-const MathOps = (() => {
-  const apiproject = 'MathOps';
-  const version = '1.0.7';
-  const schemaVersion = 0.1;
-  API_Meta[apiproject] = API_Meta[apiproject] || {};
-  API_Meta[apiproject].version = version;
-  const vd = new Date(1677072709240);
-  const versionInfo = () => {
-      log(`\u0166\u0166 ${apiproject} v${API_Meta[apiproject].version}, ${vd.getFullYear()}/${vd.getMonth() + 1}/${vd.getDate()} \u0166\u0166 -- offset ${API_Meta[apiproject].offset}`);
-      if (!state.hasOwnProperty(apiproject) || state[apiproject].version !== schemaVersion) {
-          log(`  > Updating ${apiproject} Schema to v${schemaVersion} <`);
-          switch (state[apiproject] && state[apiproject].version) {
-
-              case 0.1:
-              /* break; // intentional dropthrough */ /* falls through */
-
-              case 'UpdateSchemaVersion':
-                  state[apiproject].version = schemaVersion;
-                  break;
-
-              default:
-                  state[apiproject] = {
-                      version: schemaVersion,
-                  };
-                  break;
-          }
-      }
-  };
-  const logsig = () => {
-      // initialize shared namespace for all signed projects, if needed
-      state.torii = state.torii || {};
-      // initialize siglogged check, if needed
-      state.torii.siglogged = state.torii.siglogged || false;
-      state.torii.sigtime = state.torii.sigtime || Date.now() - 3001;
-      if (!state.torii.siglogged || Date.now() - state.torii.sigtime > 3000) {
-          state.torii.siglogged = true;
-          state.torii.sigtime = Date.now();
-      }
-      return;
-  };
-
-  const mathprocessor = (() => {
-      const tokenize = code => {
-          let results = [];
-          let tokenRegExp = /\s*([A-Za-z\s'"`]+|(?:-(?<!(?:\d|[A-Za-z\s'"`]|\))-))?[0-9]+(\.[0-9]+)?|\S)\s*/g;
-
-          let m;
-          while ((m = tokenRegExp.exec(code)) !== null)
-              results.push(m[1]);
-          return results;
-      };
-
-      const isNumber = token => {
-          return token !== undefined && token.match(/^-?[0-9]*.?[0-9]+$/) !== null;
-      };
-
-      const isName = token => {
-          return token !== undefined && token.match(/^[A-Za-z\s'"`]+$/) !== null;
-      };
-
-      const parse = o => {
-          let tokens = tokenize(o.code);
-          let position = 0;
-          const peek = () => {
-              return tokens[position];
-          };
-          const peek1 = () => {
-              if (position < tokens.length - 1) {
-                  return tokens[position + 1];
-              }
-          };
-
-          const consume = token => {
-              position++;
-          };
-
-          const parsePrimaryExpr = () => {
-              let t = peek();
-
-              if (isNumber(t)) {
-                  consume(t);
-                  return { type: "number", value: t };
-              } else if (isName(t)) {
-                  if (funcbank.hasOwnProperty(t.toLowerCase()) && peek1() === '(') {
-                      let f = t.toLowerCase();
-                      let p = [];
-                      consume(t);
-                      consume('(');
-                      while (peek() !== ')') {
-                          if (peek() === ',') {
-                              consume(',');
-                          } else {
-                              p.push(parseExpr());
-                          }
-                      }
-                      if (peek() !== ")") throw "Expected )";
-                      consume(')');
-                      return { type: 'func', func: f, params: p };
-                  } else {
-                      consume(t);
-                      return { type: "name", id: t };
-                  }
-              } else if (t === "(") {
-                  consume(t);
-                  let expr = parseExpr();
-                  if (peek() !== ")") throw "Expected )";
-                  consume(")");
-                  return expr;
-              } else {
-                  throw "Expected a number, a variable, or parentheses";
-              }
-          };
-
-          const parseMulExpr = () => {
-              let expr = parsePrimaryExpr();
-              let t = peek();
-              while (t === "*" || t === "/" || t === "%") {
-                  consume(t);
-                  let rhs = parsePrimaryExpr();
-                  expr = { type: t, left: expr, right: rhs };
-                  t = peek();
-              }
-              return expr;
-          };
-          const parseExpr = () => {
-              let expr = parseMulExpr();
-              let t = peek();
-              while (t === "+" || t === "-") {
-                  consume(t);
-                  let rhs = parseMulExpr();
-                  expr = { type: t, left: expr, right: rhs };
-                  t = peek();
-              }
-              return expr;
-          };
-          let result = parseExpr();
-          if (position !== tokens.length) throw "Unexpected '" + peek() + "'";
-          return result;
-      };
-      const formatReturn = (a, d) => {
-          switch (d) {
-              case 'roll':
-                  return `[[${a.join('+')}]]`;
-              default:
-                  return a.join(d);
-          }
-      };
-      const funcbank = {
-          abs: Math.abs,
-          min: Math.min,
-          max: Math.max,
-          maxn: (n, d, ...i) => {
-              if (!isNaN(d)) [i, d] = [[d, ...i], ','];
-              if (n > i.length) {
-                  return formatReturn(i, d);
-              }
-              return formatReturn(
-                  i.slice().sort((a, b) => { return b - a; }).slice(0, n),
-                  d);
-          },
-          minn: (n, d, ...i) => {
-              if (!isNaN(d)) [i, d] = [[d, ...i], ','];
-              if (n > i.length) {
-                  return formatReturn(i, d);
-              }
-              return formatReturn(
-                  i.slice().sort((a, b) => { return a - b; }).slice(0, n),
-                  d);
-          },
-          acos: Math.acos,
-          acosh: Math.acosh,
-          asin: Math.asin,
-          asinh: Math.asinh,
-          atan: Math.atan,
-          atanh: Math.atanh,
-          atantwo: Math.atan2,
-          cbrt: Math.cbrt,
-          ceiling: Math.ceil,
-          cos: Math.cos,
-          cosh: Math.cosh,
-          exp: Math.exp,
-          expmone: Math.expm1,
-          floor: Math.floor,
-          hypot: Math.hypot,
-          log: Math.log,
-          logonep: Math.log1p,
-          logten: Math.log10,
-          logtwo: Math.log2,
-          pow: (v, e = 1) => Math.pow(v, e),
-          rand: Math.random,
-          randb: (v1, v2) => { return Math.random() * (Math.max(v1, v2) - Math.min(v1, v2) + 1) + Math.min(v1, v2) },
-          randib: (v1, v2) => {
-              let min = Math.ceil(Math.min(v1, v2));
-              let max = Math.floor(Math.max(v1, v2));
-              return Math.floor(Math.random() * (max - min) + min);
-          },
-          randa: (...v) => v[Math.floor(Math.random() * v.length)],
-          round: (v, d = 0) => Math.round(v * 10 ** d) / 10 ** d,
-          sin: Math.sin,
-          sinh: Math.sinh,
-          sqrt: Math.sqrt,
-          tan: Math.tan,
-          tanh: Math.tanh,
-          trunc: Math.trunc
-      };
-      const knownbank = {
-          e: Math.E,
-          pi: Math.PI,
-          lntwo: Math.LN2,
-          lnten: Math.LN10,
-          logtwoe: Math.LOG2E,
-          logtene: Math.LOG10E
-      };
-      const isNum = (v) => +v === +v;
-      const typeprocessor = {
-          '-': (a, b) => { return isNum(a) && isNum(b) ? Number(a) - Number(b) : `${a}-${b}`; },
-          '+': (a, b) => { return isNum(a) && isNum(b) ? Number(a) + Number(b) : `${a}+${b}`; },
-          '/': (a, b) => { return isNum(a) && isNum(b) ? Number(a) / Number(b) : `${a}/${b}`; },
-          '*': (a, b) => { return isNum(a) && isNum(b) ? Number(a) * Number(b) : `${a}*${b}`; },
-          '%': (a, b) => { return isNum(a) && isNum(b) ? Number(a) % Number(b) : `${a}%${b}`; }
-      };
-      const isString = (s) => 'string' === typeof s || s instanceof String;
-      const evalops = o => {
-          if (!o.code || !isString(o.code)) return;
-          o.known = o.known || {};
-          Object.assign(o.known, knownbank);
-          try {
-              const getVal = t => {
-                  switch (t.type) {
-                      case 'number':
-                          return t.value;
-                      case 'name':
-                          return o.known[t.id.trim()] || t.id;
-                      case 'func':
-                          return funcbank[t.func](...t.params.map(p => getVal(p)));
-                      default:
-                          return typeprocessor[t.type](getVal(t.left), getVal(t.right));
-                  }
-              };
-              return getVal(parse(o));
-          } catch (error) {
-              return { message: error };
-          }
-      };
-      return evalops;
-  })();
-  const mathrx = /(\()?{&\s*math\s*([^}]+)\s*}((?<=\({&\s*math\s*([^}]+)\s*})\)|\1)/g;
-
-  const testConstructs = c => {
-      let result = mathrx.test(c);
-      mathrx.lastIndex = 0;
-      return result;
-  };
-  const handleInput = (msg, msgstate = {}) => {
-      let funcret = { runloop: false, status: 'unchanged', notes: '' };
-      if (msg.type !== 'api' || !testConstructs(msg.content)) return funcret;
-      if (!Object.keys(msgstate).length && scriptisplugin) return funcret;
-      let status = [];
-      let notes = [];
-      msg.content = msg.content.replace(mathrx, (m, padding, g1) => {
-          g1 = g1.replace(/\$\[\[(\d+)]]/g, (m1, roll) => {
-              let rollval;
-              if (msg.parsedinline) {
-                  rollval = msg.parsedinline[roll].value;
-              } else if (msg.inlinerolls && msg.inlinerolls[roll]) {
-                  rollval = msg.inlinerolls[roll].results.total;
-              } else {
-                  rollval = 0;
-              }
-              return rollval;
-          });
-          let result = mathprocessor({ code: g1, known: msg.variables || {} });
-          if (result.message) { // error
-              status.push('unresolved');
-              notes.push(result.message);
-              return m;
-          } else {
-              status.push('changed');
-              return result;
-          }
-      });
-      funcret.runloop = (status.includes('changed') || status.includes('unresolved'));
-      funcret.status = status.reduce((m, v) => {
-          switch (m) {
-              case 'unchanged':
-                  m = v;
-                  break;
-              case 'changed':
-                  m = v === 'unresolved' ? v : m;
-                  break;
-              case 'unresolved':
-                  break;
-          }
-          return m;
-      });
-      funcret.notes = notes.join('<br>');
-      return funcret;
-  };
-
-  let scriptisplugin = false;
-  const mathops = (m, s) => handleInput(m, s);
-  on('chat:message', handleInput);
-  on('ready', () => {
-      versionInfo();
-      logsig();
-      scriptisplugin = (typeof ZeroFrame !== `undefined`);
-      if (typeof ZeroFrame !== 'undefined') {
-          ZeroFrame.RegisterMetaOp(mathops, { priority: 55, handles: ['math'] });
-      }
-  });
-  return {
-      MathProcessor: mathprocessor
-  };
-})();
