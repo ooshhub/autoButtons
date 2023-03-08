@@ -7,7 +7,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
     scriptVersion = `0.8.9`,
-    debugLevel = 1;
+    debugLevel = 3;
   let undoUninstall = null,
     cacheBusted = false;
 
@@ -803,7 +803,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       throw new Error(`${this.constructor.name} cannot be instantiated.`);
     }
 
-    static rxKeyDigitReplacer = /(damage||crit)\.(\w+)/;
+    static rxKeyDigitReplacer = /(damage||crit)\.(\w+)/g;
     static replacers = {
       0: 'Zero',
       1: 'One',
@@ -855,7 +855,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const doTransform = (match, prefix, keyName) => {
         return `${prefix}${this.prefixJoin}${this.digitReplacer(keyName)}`;
       }
-      return mathString.replace(this.rxKeyDigitReplacer, doTransform)
+      const transform = mathString.replace(this.rxKeyDigitReplacer, doTransform);
+      return /^\s*[+-]/.test(transform)
+        ? `0${transform}`
+        : transform;
     }
 
     /**
@@ -1156,7 +1159,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           if (result.success) {
             this.buttons.showButton(buttonName);
             return result;
-          } 
+          }
+          else return result.err || `An error occurred creating the button.`;
         } else return { err: `Bad input for button creation` }
       }
     },
@@ -1877,7 +1881,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       return output;
     }
 
-    static validateMathString(inputString) {
+    static validateMathString(inputString, buttonName) {
       debug.info(inputString);
       inputString = `${inputString}`;
 
@@ -1889,12 +1893,17 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       debug.info(mathOpsString);
 
       // Create a test object
-      let damageKeys = inputString.match(/(damage|crit)\.(\w+)/g),
-        testKeys = {};
-      damageKeys = damageKeys ? damageKeys.map(k => k.replace(/^[^.]*\./, '')) : [];
-      damageKeys.forEach(k => testKeys[k] = 5);
-      debug.log(testKeys);
-      const mathOpsKeys = MathOpsTransformer.transformMathOpsPayload(testKeys);
+      const damageKeyMatches = inputString.match(/damage\.(\w+)/g) || [],
+        critKeyMatches = inputString.match(/crit\.(\w+)/g) || [],
+        damageKeys = damageKeyMatches.reduce((output, key) => ({ ...output, [key.replace(/^[^.]*\./, '')]: 5 }), {}),
+        critKeys = critKeyMatches.reduce((output, key) => ({ ...output, [key.replace(/^[^.]*\./, '')]: 5 }), {});
+
+      const { config } = ServiceLocator.getLocator().getService('config');
+      const damageProperties = Object.values(config.getSetting('templates/damageProperties')).reduce((output, category) => [ ...output, ...category ], []);
+      const invalidProperties = [ ...Object.keys(damageKeys), ...Object.keys(critKeys) ].filter(key => !(damageProperties.includes(key)));
+      if (invalidProperties.length) console.warn(`The following properties are missing: ${invalidProperties.join(', ')}`);
+      
+      const mathOpsKeys = MathOpsTransformer.transformMathOpsPayload(damageKeys, critKeys);
       debug.info(mathOpsKeys);
 
       let error;
@@ -1909,6 +1918,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         }
       }
       catch(e) { error = `Math failed validation - ${e}`; }
+      if (invalidProperties.length) new ChatDialog({ title: `Button Warning: "${buttonName}"`, content: `The following damage properties in the button are not set up in this game: ${invalidProperties.join(', ')}` }, 'error');
 
       return error
         ? { success: false, err: error }
@@ -1932,7 +1942,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (buttonData[k] != null) {
           if (k === 'default') return; // Don't allow reassignment of 'default' property
           else if (k === 'math') {
-            const { success, err } = ButtonManager.validateMathString(buttonData[k]);
+            const { success, err } = ButtonManager.validateMathString(buttonData[k], buttonData.name);
             if (!success) return { err };
             else {
               this._buttons[buttonData.name].mathString = buttonData[k];
@@ -2068,7 +2078,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         debug.info(button.mathString, MathOpsTransformer.transformMathOpsPayload(damage, crit), MathOpsTransformer.transformMathString(button.mathString));
         const result = MathOps.MathProcessor({ code: MathOpsTransformer.transformMathString(button.mathString), known: MathOpsTransformer.transformMathOpsPayload(damage, crit) });
         debug.info(result);
-        return result;
+        return isNaN(result) ? 0 : result;
       }
       else if (buttonType === 'Button') {
         return button.math(damage, crit);
@@ -2132,9 +2142,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     constructor(buttonData={}) {
       debug.info(buttonData);
       if (!buttonData.mathString) return { err: `Button must contain a math string.` };
-      const { success, err } = ButtonManager.validateMathString(buttonData.mathString);
+      const { success, err } = ButtonManager.validateMathString(buttonData.mathString, buttonData.name);
       if (!success) {
-        debug.error('===>', err);
         return { err };
       }
       Object.assign(buttonData, {
