@@ -7,7 +7,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
     scriptVersion = `0.8.9`,
-    debugLevel = 3;
+    debugLevel = 1;
   let undoUninstall = null,
     cacheBusted = false;
 
@@ -1298,6 +1298,28 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
     },
     {
+      name: 'repair',
+      rx: /^repair/,
+      description: `Attempt to repair a button from the backed up math string.`,
+      requiredServices: { buttons: 'ButtonManager' },
+      action: function() {
+        for (const _button in this.buttons._buttons) {
+          const button = this.buttons._buttons[_button];
+          if (!button.default) {
+            if (!button.mathString.trim()) {
+              if (button.mathBackup) {
+                const valid = ButtonManager.validateMathString(button.mathBackup, button.name);
+                if (valid.success) {
+                  button.mathString = button.mathBackup;
+                  new ChatDialog({ content: `${button.name} was restored from backup.` });
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       name: 'settings',
       rx: /^setting/i,
       description: `Open settings UI`,
@@ -1901,7 +1923,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const { config } = ServiceLocator.getLocator().getService('config');
       const damageProperties = Object.values(config.getSetting('templates/damageProperties')).reduce((output, category) => [ ...output, ...category ], []);
       const invalidProperties = [ ...Object.keys(damageKeys), ...Object.keys(critKeys) ].filter(key => !(damageProperties.includes(key)));
-      if (invalidProperties.length) console.warn(`The following properties are missing: ${invalidProperties.join(', ')}`);
       
       const mathOpsKeys = MathOpsTransformer.transformMathOpsPayload(damageKeys, critKeys);
       debug.info(mathOpsKeys);
@@ -2105,6 +2126,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         mathString: buttonData.mathString,
         query: buttonData.query || ``,
         default: buttonData.default === false ? false : true,
+        mathBackup: buttonData.mathBackup || '',
       });
       debug.log(this);
       if (typeof(this.math) !== 'function') return { err: `Button "${this.name}" math function failed validation` };
@@ -2153,6 +2175,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         style: buttonData.style || 'full',
         query: buttonData.query || ``,
         default: false,
+        mathBackup: buttonData.mathBackup || buttonData.mathString,
       });
       super(buttonData);
     }
