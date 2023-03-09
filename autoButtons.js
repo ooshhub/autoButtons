@@ -6,7 +6,7 @@ API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.8.9`,
+    scriptVersion = `0.8.9b`,
     debugLevel = 1;
   let undoUninstall = null,
     cacheBusted = false;
@@ -1306,11 +1306,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         for (const _button in this.buttons._buttons) {
           const button = this.buttons._buttons[_button];
           if (!button.default) {
-            if (!button.mathString.trim()) {
+            if (!button.mathString.trim() || button.mathString.trim() === '0') {
               if (button.mathBackup) {
                 const valid = ButtonManager.validateMathString(button.mathBackup, button.name);
                 if (valid.success) {
                   button.mathString = button.mathBackup;
+                  this.buttons.saveToStore();
                   new ChatDialog({ content: `${button.name} was restored from backup.` });
                 }
               }
