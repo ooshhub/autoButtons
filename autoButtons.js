@@ -6,7 +6,8 @@ API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.8.9b`,
+    scriptVersion = `0.8.9c`,
+    mathOpsZeroPatch = true,
     debugLevel = 1;
   let undoUninstall = null,
     cacheBusted = false;
@@ -2098,13 +2099,27 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const buttonType = button.constructor.name;
       if (buttonType === 'CustomButton') {
         debug.info(button.mathString, MathOpsTransformer.transformMathOpsPayload(damage, crit), MathOpsTransformer.transformMathString(button.mathString));
-        const result = MathOps.MathProcessor({ code: MathOpsTransformer.transformMathString(button.mathString), known: MathOpsTransformer.transformMathOpsPayload(damage, crit) });
+        let mathOpsString = MathOpsTransformer.transformMathString(button.mathString);
+        const mathOpsDamageKeys = MathOpsTransformer.transformMathOpsPayload(damage, crit);
+        // MathOps zeroed key patch
+        mathOpsString = mathOpsZeroPatch ? this.resolveZeroedKeys(mathOpsString, mathOpsDamageKeys) : mathOpsString;
+        debug.warn(mathOpsString);
+        let result = MathOps.MathProcessor({ code: mathOpsString, known:  mathOpsDamageKeys});
         debug.info(result);
         return isNaN(result) ? 0 : result;
       }
       else if (buttonType === 'Button') {
         return button.math(damage, crit);
       }
+    }
+    resolveZeroedKeys(mathOpsString, mathOpsDamageKeys) {
+      for (const key in mathOpsDamageKeys) {
+        if (mathOpsDamageKeys[key] === 0) {
+          const rxReplacer = new RegExp(key, 'g');
+          mathOpsString = mathOpsString.replace(rxReplacer, '0');
+        }
+      }
+      return mathOpsString;
     }
   }
 
