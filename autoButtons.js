@@ -828,7 +828,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (!/\d/.test(inputString)) return inputString;
       let modifiedString = inputString;
       for (const digit in this.replacers) {
-        modifiedString = modifiedString.replace(digit, this.replacers[digit]);
+        const rxReplacer = new RegExp(digit, 'g');
+        modifiedString = modifiedString.replace(rxReplacer, this.replacers[digit]);
       }
       return modifiedString;
     }
