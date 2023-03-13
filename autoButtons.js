@@ -6,7 +6,7 @@ API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
 const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.8.9c`,
+    scriptVersion = `0.8.9d`,
     mathOpsZeroPatch = true,
     debugLevel = 1;
   let undoUninstall = null,
