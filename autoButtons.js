@@ -1,15 +1,15 @@
-/* globals state log on sendChat playerIsGM findObjs */ //eslint-disable-line
 var API_Meta = API_Meta || {};
 API_Meta.autoButtons = { offset: Number.MAX_SAFE_INTEGER, lineCount: -1 };
 { try { throw new Error(''); } catch (e) { API_Meta.autoButtons.offset = (parseInt(e.stack.split(/\n/)[1].replace(/^.*:(\d+):.*$/, '$1'), 10) - (13)); } }
 
-const autoButtons = (() => { // eslint-disable-line no-unused-vars
+const autoButtons = (() => {
 
   const scriptName = `autoButtons`,
-    scriptVersion = `0.8.1`,
-    debugLevel = 1;
+      scriptVersion = `0.8.9d`,
+      mathOpsZeroPatch = true,
+      debugLevel = 1;
   let undoUninstall = null,
-    cacheBusted = false;
+      cacheBusted = false;
 
   const debug = {
     log: function(...args) { if (debugLevel > 3) console.log(...args) },
@@ -17,7 +17,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     warn: function(...args) { if (debugLevel > 1) console.warn(...args) },
     error: function(...args) { if (debugLevel > 0) console.error(...args) },
   }
-  
+
   /**
    * INIT SCRIPT & SETTINGS/CLI ADDITIONS FROM LAST MINOR VERSION
    */
@@ -31,59 +31,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         customButtons: {}
       },
       settings: {
-        // 0.6.x => 0.8.0 Setting additions
-        imageIcons: {
-          type: 'boolean',
-          default: true,
-          name: `Image Icons`,
-          description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
-          menuAction: `$--imageicon`,
-        },
-        darkMode: {
-          type: 'boolean',
-          default: false,
-          name: `Dark Mode`,
-          description: `Palette change for the button bar`,
-          menuAction: `$--darkMode`,
-        },
-        multiattack: {
-          type: 'boolean',
-          default: false,
-          name: `Multiattack`,
-          description: `Attempt to link the button bar label to the source attack for easy repeat rolls. 5e only.`,
-          menuAction: `$--multiattack`,
-        },
-        allowNegatives: {
-          type: 'boolean',
-          default: false,
-          name: `Allow negatives`,
-          description: `Allow final results to be negative. This can cause healing to cause damage, or damage to heal`,
-          menuAction: `$--negatives`,
-        },
-        autosort: {
-          type: 'boolean',
-          default: false,
-          name: `Sort buttons`,
-          description: `Auto sort buttons by unicode order`,
-          menuAction: `$--autosort`,
-        },
-        autohide: {
-          type: 'boolean',
-          default: true,
-          name: `Autohide buttons`,
-          description: `Autohide buttons with 0 reported damage`,
-          menuAction: `$--autohide`,
-        },
-        report: {
-          type: 'string',
-          range: [ 'off', 'gm', 'control', 'all' ],
-          rangeLabels: [ 'Off', 'GM', 'Character', 'Public' ],
-          validate: function(v) { return this.range.find(r => r.toLowerCase() === v.toLowerCase()) },
-          default: 'Off',
-          name: `Report changes`,
-          description: `Report hitpoint changes to chat`,
-          menuAction: `$--report`,
-        },
         ...defaultScriptSettings,
       },
     });
@@ -101,90 +48,25 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       options: defaultCliOptions,
     });
     Services.register({ serviceName: 'cli', serviceReference: CLI });
-    // v0.6.x => 0.7.0 CLI additions
-    CLI.addOptions([
-      {
-        name: 'imageIcons',
-        rx: /^imagei/i,
-        description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('imageIcons', args) }
-      },
-      {
-        name: `cloneButton`,
-        rx: /^clonebut/i,
-        description: `Clone a button`,
-        requiredServices: { buttons: 'ButtonManager' },
-        action: function(args) {
-          const parts = args.trim().split(/\s+/g),
-            originalButtonName = parts[0],
-            cloneName = parts[1];
-          return this.buttons.cloneButton(originalButtonName, cloneName);
-        }
-      },
-      {
-        name: `renameButton`,
-        rx: /^renamebut/i,
-        description: `Rename a button (Custom buttons only)`,
-        requiredServices: { buttons: 'ButtonManager' },
-        action: function(args) {
-          const parts = args.trim().split(/\s+/g),
-            originalButtonName = parts[0],
-            newName = parts[1];
-          return this.buttons.renameButton(originalButtonName, newName);
-        }
-      },
-      {
-        name: 'darkMode',
-        rx: /^dark/i,
-        description: `Palette change for the button bar`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('darkMode', args) }
-      },
-      {
-        name: 'multiattack',
-        rx: /^multiat/i,
-        description: `Attempt to link the button bar label to the source attack for easy repeat rolls`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('multiattack', args) }
-      },
-      {
-        name: 'allowNegatives',
-        rx: /^negative/i,
-        description: `Allow final results to be negative`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('allowNegatives', args) }
-      },
-      {
-        name: 'autosort',
-        rx: /^autosort/i,
-        description: `Auto sort buttons by unicode order`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('autosort', args) }
-      },
-      {
-        name: 'autohide',
-        rx: /^autohide/i,
-        description: `Autohide buttons with 0 reported damage`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) { return this.config.changeSetting('autohide', args) }
-      },
-      {
-        name: 'report',
-        rx: /^report/i,
-        description: `Change settings for reporting HP changes to chat`,
-        requiredServices: { config: 'ConfigController' },
-        action: function (args) {
-          const newVal = `${args}`.replace(/\W/g, '').toLowerCase();
-          return this.config.changeSetting('report', newVal);
-        }
-      },
-    ]);
+
+    const checkDependencies = async () => {
+      let err;
+      try {
+        err = typeof(MathOps) !== 'object' || typeof(TokenMod) !== 'object'
+            ? `${scriptName}: requires TokenMod and MathOps`
+            : typeof(MathOps.MathProcessor) !== 'function'
+                ? `${scriptName}: a newer version of MathOps is required.`
+                : null;
+      }
+      catch(e) { err = `${scriptName} dependencies could not be resolved - MathOps and TokenMod are required.` }
+      if (err) new ChatDialog({ title: `Fatal Error - ${scriptName} exiting...`, content: err }, 'error');
+      return !err;
+    }
 
     // Check install and version
-    const checkInstall = () => {
+    const checkInstall = async () => {
       let firstTimeSetup;
-      setTimeout(() => { if (!/object/i.test(typeof(['token-mod']))) return sendChat(scriptName, `/w gm <div style="${styles.error}">tokenMod not found - this script requires tokenMod to function! Aborting init...</div>`), 500 });
+      if (!(await checkDependencies())) return;
       if (!state[scriptName] || !state[scriptName].version ) {
         log(`autoButtons: first time setup...`);
         firstTimeSetup = 1;
@@ -221,12 +103,22 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (v < `0.7.0`) {
           // Two default buttons renamed - damageCrit => crit, and damageFull => damage
           const currentShownButtons = state[scriptName].settings.enabledButtons;
-          debug.warn(currentShownButtons);
+          debug.log(currentShownButtons);
           if (currentShownButtons) {
             const { oldDamage, oldCrit } = currentShownButtons.reduce((out, v, i) => v === 'damageCrit' ? { ...out, oldCrit: i } : v === 'damageFull' ? { ...out, oldDamage: i } : out, {});
             if (oldDamage != null) currentShownButtons[oldDamage] = 'damage';
             if (oldCrit != null) currentShownButtons[oldCrit] = 'crit';
-            debug.warn(state[scriptName].settings.enabledButtons);
+            debug.log(state[scriptName].settings.enabledButtons);
+          }
+        }
+        if (v < `0.8.9`) {
+          log(`Backing up math strings on custom buttons...`);
+          if (state[scriptName].store && state[scriptName].store.customButtons) {
+            for (const button in state[scriptName].store.customButtons) {
+              if (state[scriptName].store.customButtons[button].mathString) {
+                state[scriptName].store.customButtons[button].mathBackup = state[scriptName].store.customButtons[button].mathString;
+              }
+            }
           }
         }
         state[scriptName].version = Config.version;
@@ -234,37 +126,44 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
       Config.fetchFromState();
       if (
-        (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
-        (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
-          // debug.log(`Loading preset...`);
-          if (firstTimeSetup) Config.loadPreset();
-          else new ChatDialog({ title: `${scriptName} Install`, content:`No roll templates registered, or no buttons enabled. AutoButtons will not currently do anything. If you're still setting things up, this is probably ok, otherwise you may want to <a href="${styles.components.confirmApiCommand('reset sheet settings')} --reset" style="${styles.list.controls.create}">Reset</a> to default sheet settings.` }, 'error');
+          (!Config.getSetting('templates/names') || !Config.getSetting('templates/names').length) ||
+          (!Config.getSetting('enabledButtons') || !Config.getSetting('enabledButtons').length)) {
+        if (firstTimeSetup) Config.loadPreset();
+        else new ChatDialog({ title: `${scriptName} Install`, content:`No roll templates registered, or no buttons enabled. AutoButtons will not currently do anything. If you're still setting things up, this is probably ok, otherwise you may want to <a href="${styles.components.confirmApiCommand('reset sheet settings')} --reset" style="${styles.list.controls.create}">Reset</a> to default sheet settings.` }, 'error');
       }
       // Check state of buttons, repair if needed
       if (!state[scriptName].store) Helpers.copyOldButtonStore();
       for (const button in state[scriptName].store.customButtons) {
         state[scriptName].store.customButtons[button].default = false;
         const { err } = ButtonStore.addButton(state[scriptName].store.customButtons[button]);
-				if (err) debug.error(`${err}`);
+        const errorString = `${err}`;
+        if (err) {
+          new ChatDialog({ title: `${scriptName}: invalid button **${button}**`, content: errorString }); // **${state[scriptName].store.customButtons[button].name}** - ${err}
+          const recoverButton = { ...state[scriptName].store.customButtons[button], mathString: '0' };
+          const { err } = ButtonStore.addButton(recoverButton);
+          if (!err) {
+            new ChatDialog({ title: `${scriptName}: recovered button`, content: `Button math was cleared, the problem math string was ${recoverButton.mathBackup}.` });
+          }
+        }
       }
       const allButtons = ButtonStore.getButtonNames(),
-        enabledButtons = Config.getSetting('enabledButtons');
+          enabledButtons = Config.getSetting('enabledButtons');
       const validButtons = enabledButtons.filter(v => allButtons.includes(v));
       if (validButtons.length !== enabledButtons.length) {
-				debug.warn(`Invalid button found in enabledButtons - button hidden.`);
+        debug.warn(`Invalid button found in enabledButtons - button hidden.`);
         Config.changeSetting('enabledButtons', validButtons, { overwriteArray: true });
       }
       log(`=( Initialised ${scriptName} - v${Config.version} )=`);
     }
-    
+
     // Send buttons to chat
     const sendButtons = (damage, crit, msg) => {
       const gmOnly = Config.getSetting('gmOnly') ? true : false,
-        activeButtons = Config.getSetting(`enabledButtons`) || [],
-        name = Helpers.findName(msg.content),
-        buttonArray = Config.getSetting('autosort') ? activeButtons.sort((a,b) => a > b ? 1 : -1) : activeButtons,
-        htmlArray = buttonArray.map(btn => ButtonStore.createApiButton(btn, damage, crit)).filter(v=>v),
-        darkMode = Config.getSetting('darkMode');
+          activeButtons = Config.getSetting(`enabledButtons`) || [],
+          name = Helpers.findName(msg.content),
+          buttonArray = Config.getSetting('autosort') ? activeButtons.sort((a,b) => a > b ? 1 : -1) : activeButtons,
+          htmlArray = buttonArray.map(btn => ButtonStore.createApiButton(btn, damage, crit)).filter(v=>v),
+          darkMode = Config.getSetting('darkMode');
       let sourceAttackAbility;
       if (Config.getSetting('multiattack')) sourceAttackAbility = Helpers5e.findNpcAttack(msg, name);
       const buttonBarLabel = sourceAttackAbility ? `<div class="rollname" style="${styles.rollName}"><a href="&grave;${sourceAttackAbility}" style="${styles.rollName}">${name}</a></div>` : `<div class="rollname" style="${styles.rollName}${Helpers.appendDarkMode('rollName', darkMode)}">${name}</div>`;
@@ -281,16 +180,16 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     // Deconstruct & repackage Roll20 roll object
     const handleDamageRoll = (msg) => {
       const dmgFields = Config.getSetting('templates/damageProperties/damageFields')||[],
-        critFields = Config.getSetting('templates/damageProperties/critFields')||[];
+          critFields = Config.getSetting('templates/damageProperties/critFields')||[];
       const damage = Helpers.processFields(dmgFields, msg),
-        crit = Helpers.processFields(critFields, msg);
+          crit = Helpers.processFields(critFields, msg);
       if ('dnd5e_r20' === Config.getSetting('sheet')) {
         const isSpell = Helpers5e.is5eAttackSpell(msg.content);
         if (isSpell) {
           const upcastDamageFields = Config.getSetting('templates/damageProperties/upcastDamage')||[],
-            upcastCritFields = Config.getSetting('templates/damageProperties/upcastCrit')||[];
+              upcastCritFields = Config.getSetting('templates/damageProperties/upcastCrit')||[];
           const upcastDamage = Helpers.processFields(upcastDamageFields, msg),
-            upcastCrit = Helpers.processFields(upcastCritFields, msg);
+              upcastCrit = Helpers.processFields(upcastCritFields, msg);
           Helpers.mergeDamageObjects(damage, upcastDamage);
           Helpers.mergeDamageObjects(crit, upcastCrit);
         }
@@ -303,7 +202,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       const msgIsGM = playerIsGM(msg.playerid);
       if (msg.type === 'api' && msgIsGM && /^!autobut(ton)?s?\b/i.test(msg.content)) {
         const cmdLine = (msg.content.match(/^![^\s]+\s+(.+)/i) || [])[1],
-          commands = cmdLine ? cmdLine.split(/\s*--\s*/g) : [];
+            commands = cmdLine ? cmdLine.split(/\s*--\s*/g) : [];
         commands.shift();
         debug.log(commands);
         if (commands.length) CLI.assess(commands);
@@ -323,7 +222,6 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
   /**
    * SHEET PRESET DATA
    */
-  // TODO: Replace with PresetController class ???
   const preset = {
     dnd5e_r20: {
       sheet: ['dnd5e_r20'],
@@ -373,7 +271,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     resist: ` font-family: pictos three; font-size: 2.6rem; line-height: 2.8rem; text-shadow: 0px 0px 2px black; color: #003f82;`,
     resistSmall: ` font-family: pictos three; font-size: 2.2rem; line-height: 2.8rem; color: #003f82; text-shadow: 0px 0px 1px black;`,
     resistLabel: `font-family: cursive; font-size: 1rem; line-height: 2.6rem; `,
-    imageIcon: `width: 100%;`, //background-color: transparent;	border: none;	border-radius: 5px; padding: 0px; 
+    imageIcon: `width: 100%;`, //background-color: transparent;	border: none;	border-radius: 5px; padding: 0px;
     imageIcons: {
       damage: `https://s3.amazonaws.com/files.d20.io/images/306656028/gtPy6tdbegC9QOtDd1nf6Q/original.png`,
       damageHalf: ``,
@@ -436,8 +334,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     components: {
       labelWithDelete: function(label, commandString) {
         const styleOuter = `border: 1px solid whitesmoke; padding: 0.2rem 0rem; border-radius: 0.5rem; width: max-content; margin: 2px auto; display: inline-block; line-height: 1.2rem; white-space: nowrap;`,
-          styleDelete = `font-family: pictos; color: darkred;	background-color: gray; height: 1rem; line-height: 1.2rem; width: 1.2rem; text-align: center; margin: 0 1rem; border: 1px solid #aaa8a8; border-radius: 0.5rem;`,
-          styleLabel = `display: inline-block; overflow-x: clip; margin-left: 0.5rem;`
+            styleDelete = `font-family: pictos; color: darkred;	background-color: gray; height: 1rem; line-height: 1.2rem; width: 1.2rem; text-align: center; margin: 0 1rem; border: 1px solid #aaa8a8; border-radius: 0.5rem;`,
+            styleLabel = `display: inline-block; overflow-x: clip; margin-left: 0.5rem;`
         return `<div class="label-delete" style="${styleOuter}"><div style="${styleLabel}">${label}</div><a href="${commandString}" class="delete-button" style="${styleDelete}" title="Delete">&ast;</a></div>`
       },
       confirmApiCommand: function(confirmAction) {
@@ -703,17 +601,17 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
   /**
    * HELPER FUNCTIONS
    */
-  class Helpers { 
+  class Helpers {
     // Process roll object according to rolltemplate fields
     static processFields(fieldArray, msg) {
       let output = {}
       const rolls = msg.inlinerolls;
       output.total = fieldArray.reduce((m, v) => {
         const rxIndex = new RegExp(`{${v}=\\$\\[\\[\\d+`, 'g'),
-          indexResult = msg.content.match(rxIndex);
+            indexResult = msg.content.match(rxIndex);
         if (indexResult) {
           const index = indexResult.pop().match(/\d+$/)[0],
-            total = isNaN(rolls[index].results.total) ? 0 : rolls[index].results.total;
+              total = isNaN(rolls[index].results.total) ? 0 : rolls[index].results.total;
           output[v] = total;
           return m + total;
         } else { // if roll template property's inline roll is not found, return 0 to prevent errors down the line
@@ -743,11 +641,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     // Split {{handlebars=moustache}} notation to key:value
     static splitHandlebars(inputString) {
       let output = {},
-        kvArray = inputString.match(/{{[^}]+}}/g)||[];
+          kvArray = inputString.match(/{{[^}]+}}/g)||[];
       kvArray.forEach(kv => {
         kv = kv.replace(/({{|}})/g, '');
         const key = kv.match(/^[^=]+/),
-          value = (kv.match(/=(.+)/)||[])[1] || ``;
+            value = (kv.match(/=(.+)/)||[])[1] || ``;
         if (key) output[key] = value;
       });
       return Object.keys(output).length ? output : null;
@@ -774,7 +672,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
     /**
      * Check if an object is a basic JS object
-     * @param {any} input 
+     * @param {any} input
      * @returns {bool}
      */
     static isObj(input) {
@@ -796,11 +694,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       return objRef;
     }
 
-    // If value exists in array, it will be removed, otherwise it will be added. No validation done. Does not mutate the original.
-    static modifyArray(targetArray, newValue) { 
+    // If value exists in array, it will be removed, otherwise it will be added. No validation done.
+    static modifyArray(targetArray, newValue) {
       if (!Array.isArray(targetArray || newValue == null)) return { err: `modifyArray error, bad parameters` };
       if (targetArray.includes(newValue)) {
-          Helpers.filterAndMutate(targetArray, (v) => v === newValue);
+        Helpers.filterAndMutate(targetArray, (v) => v === newValue);
         return { msg: `Removed ${newValue} from array.` }
       }
       else {
@@ -812,12 +710,12 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     /**
      * Filter an array by reference
      * @param {array.<string>} inputArray
-     * @param {function} predicate 
+     * @param {function} predicate
      * @return {boolean} success/failure
      */
     static filterAndMutate(inputArray, predicate) {
       if (typeof(predicate) !== 'function' || !Array.isArray(inputArray)) {
-        debug.error(`filterMutate requires an array and a predicate function.`);
+        debug.error(`filterAndMutate requires an array and a predicate function.`);
         return false;
       }
       for (let i=inputArray.length-1; i>=0; i--) {
@@ -840,7 +738,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
     /**
      * Recalculate the total key in a damage object
-     * @param {object} damageObject 
+     * @param {object} damageObject
      */
 
     static recalculateDamageTotal(damageObject) {
@@ -849,8 +747,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
     /**
      * Merge two damage objects together and recalculate total
-     * @param {object} baseObject 
-     * @param {object} addObject 
+     * @param {object} baseObject
+     * @param {object} addObject
      */
     static mergeDamageObjects(baseObject, addObject) {
       Object.assign(baseObject, addObject);
@@ -870,7 +768,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     /**
      * Find a repeating_npcaction attack from the roll template content. Optionally supply the attack name.
      * @param {Object} msg - r20 message object
-     * @param {string} [attackName] - name of the attack 
+     * @param {string} [attackName] - name of the attack
      * @returns {?string} - content of @{rollbase} in the target attack
      */
     static findNpcAttack = (msg, attackName) => {
@@ -882,7 +780,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       };
       attackName = attackName || (msg.content.match(rx.attackName)||[])[1];
       const characterName = (msg.content.match(rx.characterName)||[])[1],
-        char = findObjs({ type: 'character', name: characterName })[0];
+          char = findObjs({ type: 'character', name: characterName })[0];
       if (!char || !attackName) return null;
       const attackRowId = findObjs({ type: 'attribute', characterid: char.id }).reduce((out, attribute) => {
         if (attribute.get('current') === attackName) {
@@ -894,6 +792,87 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       return attackRowId ? `&commat;&lcub;${characterName}|repeating_npcaction_${attackRowId}_rollbase&rcub;` : null;
       // const targetRollAttribute = findObjs({ type: 'attribute', characterid: char.id, name: `repeating_npcaction_${attackRowId}_rollbase` })[0];
       // if (targetRollAttribute) return targetRollAttribute.get('current');
+    }
+  }
+
+  /**
+   * MATH-OPS - Transform autoButtons math strings and damage objects for MathOps API
+   */
+  class MathOpsTransformer {
+    constructor() {
+      throw new Error(`${this.constructor.name} cannot be instantiated.`);
+    }
+
+    static rxKeyDigitReplacer = /(damage||crit)\.(\w+)/g;
+    static replacers = {
+      0: 'Zero',
+      1: 'One',
+      2: 'Two',
+      3: 'Three',
+      4: 'Four',
+      5: 'Five',
+      6: 'Six',
+      7: 'Seven',
+      8: 'Eight',
+      9: 'Nine',
+    };
+    static prefixJoin = 'X';
+
+    /**
+     * Replace all digits in a string with alpha characters
+     * @param {string} inputString
+     * @returns {string}
+     */
+    static digitReplacer(inputString) {
+      if (!/\d/.test(inputString)) return inputString;
+      let modifiedString = inputString;
+      for (const digit in this.replacers) {
+        const rxReplacer = new RegExp(digit, 'g');
+        modifiedString = modifiedString.replace(rxReplacer, this.replacers[digit]);
+      }
+      return modifiedString;
+    }
+
+    /**
+     * Transform the keynames in the damage object to make them MathOps-friendly
+     * @param {object} damageObject - autoButtons damage object with damage values
+     * @param {string} prefix - prefix string, damage or crit
+     * @returns {object} - autoButtons damage object with numerals replaced with alpha character in key names
+     */
+    static transformDamageObject(damageObject, prefix) {
+      return Object.entries(damageObject).reduce((output, [ key, value ]) => {
+        const newKey = `${prefix}${this.prefixJoin}${this.digitReplacer(key)}`;
+        output[newKey] = value;
+        return output;
+      }, {});
+    }
+
+    /**
+     * Transform a math string for MathOps - same transform as the damage objects
+     * @param {string} mathString - autoButtons math string
+     * @returns {string} - math string with key references transformed to remove digits
+     */
+    static transformMathString(mathString) {
+      const doTransform = (match, prefix, keyName) => {
+        return `${prefix}${this.prefixJoin}${this.digitReplacer(keyName)}`;
+      }
+      const transform = mathString.replace(this.rxKeyDigitReplacer, doTransform);
+      return /^\s*[+-]/.test(transform)
+          ? `0${transform}`
+          : transform;
+    }
+
+    /**
+     * Transform the damage and crit objects for use with MathOps
+     * @param {object} damageObject - autoButtons damage object with damage values
+     * @param {object} critObject - autoButtons crit object with damage values
+     * @returns {object} - flattened object with all numerals in keynames replaced with alpha characters, prefixed with parent object name
+     */
+    static transformMathOpsPayload(damageObject, critObject = {}) {
+      return {
+        ...this.transformDamageObject(damageObject, 'damage'),
+        ...this.transformDamageObject(critObject, 'crit'),
+      }
     }
   }
 
@@ -917,7 +896,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         const result = this.config.changeSetting('targetTokens', args, { createPath: true, force: 'boolean' });
         if (this.config.getSetting('targetTokens') && result.success && result.msg) result.msg.push(`*Important*: Players cannot use targeting unless TokenMod is set to allow players to use token ids.`);
         return result;
-       }
+      }
     },
     {
       name: 'reset',
@@ -967,13 +946,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       requiredServices: { config: 'ConfigController' },
       action: function () {
         const templates = this.config.getSetting(`templates/names`),
-          confirm = styles.components.confirmApiCommand(`delete this template name?`),
-          templateText = Helpers.toArray(templates).map(v => [
-            // `<div style="">${v}</div>`,
-            // `<a href="!autobut --deleteTemplate ${v}" style="${styles.table.button}">Delete</a>`
-            styles.components.labelWithDelete(v, `${confirm}autobut --deleteTemplate ${v}`)
-          ]),
-          footerContent = `<a href="!autobut --addTemplate ?{Roll template name}" style="${styles.list.controls.create}">Add template</a>`;
+            confirm = styles.components.confirmApiCommand(`delete this template name?`),
+            templateText = Helpers.toArray(templates).map(v => [
+              // `<div style="">${v}</div>`,
+              // `<a href="!autobut --deleteTemplate ${v}" style="${styles.table.button}">Delete</a>`
+              styles.components.labelWithDelete(v, `${confirm}autobut --deleteTemplate ${v}`)
+            ]),
+            footerContent = `<a href="!autobut --addTemplate ?{Roll template name}" style="${styles.list.controls.create}">Add template</a>`;
         templateText.unshift([ 'Template name']);
         new ChatDialog({ content: templateText, title: `Roll Template List`, footer: footerContent }, 'table');
       }
@@ -1011,8 +990,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       requiredServices: { config: 'ConfigController' },
       action: function () {
         const properties = this.config.getSetting('templates/damageProperties'),
-          confirm = styles.components.confirmApiCommand(`delete this template property?`),
-          styleCategory = `font-size: 1.4rem; font-weight: bold; font-style: italic;`
+            confirm = styles.components.confirmApiCommand(`delete this template property?`),
+            styleCategory = `font-size: 1.4rem; font-weight: bold; font-style: italic;`
         let templateText = [ ['Category', 'Properties'] ];
         if (typeof properties === 'object') {
           for (let category in properties) {
@@ -1076,10 +1055,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       requiredServices: { config: 'ConfigController', buttons: 'ButtonManager' },
       action: function() {
         const removableButtons = this.buttons.getButtonNames({ default: false }),
-          usedButtons = this.config.getSetting('enabledButtons'),
-          unusedButtons = this.buttons.getButtonNames({ hidden: true }),
-          availableButtons = this.buttons.getButtonNames({ hidden: true, currentSheet: true }),
-          reorderedButtons = usedButtons.concat(unusedButtons);
+            usedButtons = this.config.getSetting('enabledButtons'),
+            unusedButtons = this.buttons.getButtonNames({ hidden: true }),
+            availableButtons = this.buttons.getButtonNames({ hidden: true, currentSheet: true }),
+            reorderedButtons = usedButtons.concat(unusedButtons);
         const links = {
           hide: `!autoButton --hideButton %name%`,
           show: `!autoButton --showButton %name%`,
@@ -1101,14 +1080,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
                 (control === 'show' && availableButtons.includes(button)) ||
                 (control === 'hide' && usedButtons.includes(button)) ||
                 (control === 'delete' && removableButtons.includes(button))) ?
-              control : 'disabled';
+                control : 'disabled';
             rowHtml += `<div class="control-${control}" style="${styles.list.buttonContainer}" title="${Helpers.emproper(`${control} button`)}"><a href="${links[controlType]}" style="${styles.list.controls.common}${styles.list.controls[controlType]}">${labels[control]}</a></div>`;
           });
           return `${rowHtml.replace(/%name%/g, button)}</div>`;
         });
         const headerText = `autoButton list (sheet: ${this.config.getSetting('sheet')})`,
-          bodyText = listBody.join(''),
-          footerText = `<a style="${styles.list.controls.create}" href="!autobut --createbutton {{name=?{Name?|newButton}}} {{content=?{Pictos Character?|k}}} {{tooltip=?{Tooltip?|This is a button}}} {{math=?{Math function|floor(damage.total/2&rpar;}}}">Create New Button</a>`;
+            bodyText = listBody.join(''),
+            footerText = `<a style="${styles.list.controls.create}" href="!autobut --createbutton {{name=?{Name?|newButton}}} {{content=?{Pictos Character?|k}}} {{tooltip=?{Tooltip?|This is a button}}} {{math=?{Math function|floor(damage.total/2&rpar;}}}">Create New Button</a>`;
         new ChatDialog({ header: headerText, body: bodyText, footer: footerText }, 'listButtons');
       },
     },
@@ -1146,7 +1125,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       action: function (args) {
         if (!args) return;
         const newIndices = args.replace(/[^\d,]/g, '').split(/,/g),
-          currentOrder = this.config.getSetting('enabledButtons');
+            currentOrder = this.config.getSetting('enabledButtons');
         let newOrder = [];
         let valid = true;
         newIndices.forEach(buttonIndex => {
@@ -1176,13 +1155,13 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           if (this.buttons.getButtonNames().includes(buttonName)) return { err: `Invalid button name, already in use: "${buttonName}"` }
           if (!buttonData.math) return { err: `Button must have an associated function, {{math=...}}` }
           buttonData.default = false;
-          // construct query if provided
-          // if (buttonData.query) buttonData.query = Button.splitAndEscapeQuery(buttonData.query);
+          buttonData.mathString = buttonData.math;
           const result = this.buttons.addButton(buttonData);
           if (result.success) {
             this.buttons.showButton(buttonName);
             return result;
-          } 
+          }
+          else return result.err || `An error occurred creating the button.`;
         } else return { err: `Bad input for button creation` }
       }
     },
@@ -1198,7 +1177,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           if (this.buttons.getButtonNames().includes(buttonData.name)) {
             return this.buttons.editButton(buttonData);
           }
-        } 
+        }
       }
     },
     {
@@ -1208,7 +1187,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       requiredServices: { buttons: 'ButtonManager', config: 'ConfigController' },
       action: function (args) {
         const removeResult = this.buttons.removeButton(args.trim()),
-          buttonIsEnabled = this.config.getSetting('enabledButtons').includes(args);
+            buttonIsEnabled = this.config.getSetting('enabledButtons').includes(args);
         if (removeResult.success) {
           if (buttonIsEnabled) this.config.changeSetting('enabledButtons', args);
           return removeResult;
@@ -1242,6 +1221,105 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       description: `Whisper the buttons to GM, or post publicly`,
       requiredServices: { config: 'ConfigController' },
       action: function (args) { return this.config.changeSetting('gmOnly', args) }
+    },
+    {
+      name: 'imageIcons',
+      rx: /^imagei/i,
+      description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('imageIcons', args) }
+    },
+    {
+      name: `cloneButton`,
+      rx: /^clonebut/i,
+      description: `Clone a button`,
+      requiredServices: { buttons: 'ButtonManager' },
+      action: function(args) {
+        const parts = args.trim().split(/\s+/g),
+            originalButtonName = parts[0],
+            cloneName = parts[1];
+        return this.buttons.cloneButton(originalButtonName, cloneName);
+      }
+    },
+    {
+      name: `renameButton`,
+      rx: /^renamebut/i,
+      description: `Rename a button (Custom buttons only)`,
+      requiredServices: { buttons: 'ButtonManager' },
+      action: function(args) {
+        const parts = args.trim().split(/\s+/g),
+            originalButtonName = parts[0],
+            newName = parts[1];
+        return this.buttons.renameButton(originalButtonName, newName);
+      }
+    },
+    {
+      name: 'darkMode',
+      rx: /^dark/i,
+      description: `Palette change for the button bar`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('darkMode', args) }
+    },
+    {
+      name: 'multiattack',
+      rx: /^multiat/i,
+      description: `Attempt to link the button bar label to the source attack for easy repeat rolls`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('multiattack', args) }
+    },
+    {
+      name: 'allowNegatives',
+      rx: /^negative/i,
+      description: `Allow final results to be negative`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('allowNegatives', args) }
+    },
+    {
+      name: 'autosort',
+      rx: /^autosort/i,
+      description: `Auto sort buttons by unicode order`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('autosort', args) }
+    },
+    {
+      name: 'autohide',
+      rx: /^autohide/i,
+      description: `Autohide buttons with 0 reported damage`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) { return this.config.changeSetting('autohide', args) }
+    },
+    {
+      name: 'report',
+      rx: /^report/i,
+      description: `Change settings for reporting HP changes to chat`,
+      requiredServices: { config: 'ConfigController' },
+      action: function (args) {
+        const newVal = `${args}`.replace(/\W/g, '').toLowerCase();
+        return this.config.changeSetting('report', newVal);
+      }
+    },
+    {
+      name: 'repair',
+      rx: /^repair/,
+      description: `Attempt to repair a button from the backed up math string.`,
+      requiredServices: { buttons: 'ButtonManager' },
+      action: function() {
+        for (const _button in this.buttons._buttons) {
+          const button = this.buttons._buttons[_button];
+          if (!button.default) {
+            if (!button.mathString.trim() || button.mathString.trim() === '0') {
+              if (button.mathBackup) {
+                const valid = ButtonManager.validateMathString(button.mathBackup, button.name);
+                if (valid.success) {
+                  button.mathString = button.mathBackup;
+                  this.buttons.saveToStore();
+                  new ChatDialog({ content: `${button.name} was restored from backup.` });
+                }
+              }
+            }
+          }
+        }
+      }
     },
     {
       name: 'settings',
@@ -1280,7 +1358,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
   /**
    * SCRIPT USER-CONFIG OPTIONS
-   * 
+   *
    * Must have a valid type to be pulled into SettingsManager as a setting
    * 'object' type can be used for nesting settings keys
    * 'validate' is a validator for the input, not necessarily the key itself (e.g. an array might accept strings in the validator)
@@ -1354,6 +1432,58 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       description: `CSS to bump the button container up in chat to save some space`,
       menuAction: `$--bump`,
     },
+    imageIcons: {
+      type: 'boolean',
+      default: true,
+      name: `Image Icons`,
+      description: `Render default icons as images (may solve font aligntment issues on Mac / ChromeOS)`,
+      menuAction: `$--imageicon`,
+    },
+    darkMode: {
+      type: 'boolean',
+      default: false,
+      name: `Dark Mode`,
+      description: `Palette change for the button bar`,
+      menuAction: `$--darkMode`,
+    },
+    multiattack: {
+      type: 'boolean',
+      default: false,
+      name: `Multiattack`,
+      description: `Attempt to link the button bar label to the source attack for easy repeat rolls. 5e only.`,
+      menuAction: `$--multiattack`,
+    },
+    allowNegatives: {
+      type: 'boolean',
+      default: false,
+      name: `Allow negatives`,
+      description: `Allow final results to be negative. This can cause healing to cause damage, or damage to heal`,
+      menuAction: `$--negatives`,
+    },
+    autosort: {
+      type: 'boolean',
+      default: false,
+      name: `Sort buttons`,
+      description: `Auto sort buttons by unicode order`,
+      menuAction: `$--autosort`,
+    },
+    autohide: {
+      type: 'boolean',
+      default: true,
+      name: `Autohide buttons`,
+      description: `Autohide buttons with 0 reported damage`,
+      menuAction: `$--autohide`,
+    },
+    report: {
+      type: 'string',
+      range: [ 'off', 'gm', 'control', 'all' ],
+      rangeLabels: [ 'Off', 'GM', 'Character', 'Public' ],
+      validate: function(v) { return this.range.find(r => r.toLowerCase() === v.toLowerCase()) },
+      default: 'Off',
+      name: `Report changes`,
+      description: `Report hitpoint changes to chat`,
+      menuAction: `$--report`,
+    },
     templates: {
       type: 'object',
       names: {
@@ -1398,9 +1528,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     },
   }
 
- /**
- * CLASS DEFINITIONS
- */
+  /**
+   * CLASS DEFINITIONS
+   */
 
   /**
    * Service Locator - Find a registered service from any scope in the script with ServiceLocator.getLocator().getService('serviceName')
@@ -1474,11 +1604,11 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           settingsKey.type === 'array' && Array.isArray(settingsValue)
           || ['float', 'integer', 'number'].includes(settingsKey.type) && typeof(settingsValue) === 'number'
           || typeof(settingsValue) === settingsKey.type
-        ) ? true : false;
+      ) ? true : false;
       // debug.log(passValidation);
       return passValidation;
     }
-      
+
 
     // Validate an input to be stored in a settings key (e.g. may be a primitive value to be stored in an object type key)
     // Returns undefined for failed validation, otherwise returns value ready for storage
@@ -1508,7 +1638,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
 
     _writeSetting(settingsKey, newValue, options = { overwriteArray: false }) {
       const validationOptions = (options.overwriteArray) ? { forceValidation: (v) => Array.isArray(v) } : {},
-        validData = this._validateNewValue(settingsKey, newValue, validationOptions);
+          validData = this._validateNewValue(settingsKey, newValue, validationOptions);
       if (validData === undefined) {
         debug.error(`${this.constructor.name}: Settings change not applied, value failed validation`, settingsKey, newValue);
         return { err: `${this.constructor.name}: Settings change not applied, value failed validation` }
@@ -1577,16 +1707,16 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (typeof(pathString) !== 'string' || newValue === undefined) return { err: `Bad path string or no new value supplied.` };
       // Can probably remove this bit now that a .value key is used
       const keyName = (pathString.match(/[^/]+$/)||[])[0],
-        path = /.+\/.+/.test(pathString) ? pathString.match(/(.+)\/[^/]+$/)[1] : '',
-        configPath = path ? Helpers.getObjectPath(path, this._settingsKeys, options.createPath) : this._settingsKeys,
-        targetKey = configPath[keyName];
+          path = /.+\/.+/.test(pathString) ? pathString.match(/(.+)\/[^/]+$/)[1] : '',
+          configPath = path ? Helpers.getObjectPath(path, this._settingsKeys, options.createPath) : this._settingsKeys,
+          targetKey = configPath[keyName];
       if (targetKey) {
         debug.log(`changeSetting - ${keyName}`, targetKey, options, newValue);
         if (targetKey.type === 'boolean') {
           newValue = (newValue == null || newValue === '') ? !targetKey.value :
-            rx.on.test(newValue) ? true :
-            rx.off.test(newValue) ? false :
-            newValue;
+              rx.on.test(newValue) ? true :
+                  rx.off.test(newValue) ? false :
+                      newValue;
         }
         const result = this._writeSetting(targetKey, newValue, options);
         if (result.msg) result.msg = `Changed setting: ${pathString}<br>${result.msg}`;
@@ -1614,9 +1744,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           }
           else if (currentObject[key].menuAction) {
             const name = currentObject[key].name || key,
-              hover = currentObject[key].description ? `title="${currentObject[key].description}"` : ``,
-              settingName = `<div class="setting-name" style="${styles.table.settingName}" ${hover}>${name}</div>`,
-              currentSetting = `${currentObject[key].value}`;
+                hover = currentObject[key].description ? `title="${currentObject[key].description}"` : ``,
+                settingName = `<div class="setting-name" style="${styles.table.settingName}" ${hover}>${name}</div>`,
+                currentSetting = `${currentObject[key].value}`;
             // Entry has a custom menu action
             if (/^[^$]/.test(currentObject[key].menuAction)) {
               targetOutput.push([ settingName, currentObject[key].menuAction ]);
@@ -1624,14 +1754,14 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             // Autofill prompt for boolean or defined range
             else {
               const queryRange =
-                currentObject[key].type === 'boolean' ? ['True', 'False']
-                : currentObject[key].range ?
-                  currentObject[key].rangeLabels ? currentObject[key].range.map((v,i) => `${currentObject[key].rangeLabels[i]||v},${v}`)
-                  : Helpers.toArray(currentObject[key].range)
-                : '',
-                queryString = queryRange ? `?{Select new value|${queryRange.join('|')}}` : `?{Enter new value}`,
-                cliFlag = (`${currentObject[key].menuAction}`.match(/^\$(.+)/)||[])[1] || `--${key}`,
-                commandString = `!${scriptName} ${cliFlag} ${queryString}`;
+                      currentObject[key].type === 'boolean' ? ['True', 'False']
+                          : currentObject[key].range ?
+                              currentObject[key].rangeLabels ? currentObject[key].range.map((v,i) => `${currentObject[key].rangeLabels[i]||v},${v}`)
+                                  : Helpers.toArray(currentObject[key].range)
+                              : '',
+                  queryString = queryRange ? `?{Select new value|${queryRange.join('|')}}` : `?{Enter new value}`,
+                  cliFlag = (`${currentObject[key].menuAction}`.match(/^\$(.+)/)||[])[1] || `--${key}`,
+                  commandString = `!${scriptName} ${cliFlag} ${queryString}`;
               targetOutput.push([ settingName, `<a href="${commandString}" style="${styles.table.button}">${currentSetting}</a>`]);
             }
           }
@@ -1732,8 +1862,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     }
     getSettingsMenu() {
       const menuOptions = this._settings.getMenuText(),
-        confirm = styles.components.confirmApiCommand(`reset to default sheet settings?`),
-        footerContent = `<div style="${styles.table.footer}"><a href="${confirm} --reset" style="${styles.list.controls.create}">Reset Sheet Settings</a>`;
+          confirm = styles.components.confirmApiCommand(`reset to default sheet settings?`),
+          footerContent = `<div style="${styles.table.footer}"><a href="${confirm} --reset" style="${styles.list.controls.create}">Reset Sheet Settings</a>`;
       menuOptions.unshift(['Key', 'Setting']);
       new ChatDialog({ title: `${scriptName} settings<br>v${scriptVersion}`, content: menuOptions, footer: footerContent }, 'table');
     }
@@ -1765,7 +1895,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     getButtonNames(filters={ default: null, currentSheet: null, shown: null, hidden: null }) {
       let buttons = Object.entries(this._buttons);
       const sheet = this._Config.getSetting('sheet'),
-        enabledButtons = this._Config.getSetting('enabledButtons');
+          enabledButtons = this._Config.getSetting('enabledButtons');
       if (typeof filters.default === 'boolean') buttons = buttons.filter(kv => kv[1].default === filters.default);
       if (typeof filters.currentSheet === 'boolean') buttons = buttons.filter(kv => (!kv[1].sheets.length || sheet === 'custom' || (kv[1].sheets.includes(sheet) === filters.currentSheet)));
       if (typeof filters.shown === 'boolean') buttons = buttons.filter(kv => (enabledButtons.includes(kv[0]) === filters.shown));
@@ -1775,51 +1905,52 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       return output;
     }
 
-    static parseMathString(inputString) {
-      // debug.info(inputString);
+    static validateMathString(inputString, buttonName) {
+      debug.info(inputString);
       inputString = `${inputString}`;
-      let err = '';
+
       // Default buttons will send in a JS function, remove the declaration part
       inputString = inputString.replace(/^.*?=>\s*/, '');
 
-      // Convert to JS
-      const formulaReplacer = {
-        '$1Math.floor': /([^.]|^)floor/ig,
-        '$1Math.ceil': /([^.]|^)ceil/ig,
-        '$1Math.round': /([^.]|^)round/ig,
-        '($1||0)': /((damage|crit)\.\w+)/ig,
-      }
-      // Very basic security, at least stops a `state = null`
-      const disallowed = [ /=/g, /\bstate\b/gi ];
-
-      disallowed.forEach(rx => { if (rx.test(inputString)) err += `Disallowed value in math formula: "${`${rx}`.replace(/(\\\w|\/)/g, '')}"` });
-      
       let newFormula = inputString;
-      for (let f in formulaReplacer) newFormula = newFormula.replace(formulaReplacer[f], f);
+      const mathOpsString = MathOpsTransformer.transformMathString(newFormula);
+      debug.info(mathOpsString);
 
       // Create a test object
-      let damageKeys = inputString.match(/(damage|crit)\.(\w+)/g),
-        testKeys = {};
-      damageKeys = damageKeys ? damageKeys.map(k => k.replace(/^[^.]*\./, '')) : [];
-      damageKeys.forEach(k => testKeys[k] = 5);
+      const damageKeyMatches = inputString.match(/damage\.(\w+)/g) || [],
+          critKeyMatches = inputString.match(/crit\.(\w+)/g) || [],
+          damageKeys = damageKeyMatches.reduce((output, key) => ({ ...output, [key.replace(/^[^.]*\./, '')]: 5 }), {}),
+          critKeys = critKeyMatches.reduce((output, key) => ({ ...output, [key.replace(/^[^.]*\./, '')]: 5 }), {});
 
-      let validate = false,
-        newFunc;
+      const { config } = ServiceLocator.getLocator().getService('config');
+      const damageProperties = Object.values(config.getSetting('templates/damageProperties')).reduce((output, category) => [ ...output, ...category ], []);
+      const invalidProperties = [ ...Object.keys(damageKeys), ...Object.keys(critKeys) ].filter(key => !(damageProperties.includes(key)));
+
+      const mathOpsKeys = MathOpsTransformer.transformMathOpsPayload(damageKeys, critKeys);
+      debug.info(mathOpsKeys);
+
+      let error;
       try {
-        newFunc = new Function(`damage`, `crit`, `return (${newFormula})`)
-        validate = isNaN(newFunc(testKeys, testKeys)) ? false : true;
-      } catch(e) { err += (`${scriptName}: formula failed validation`) }
-
-      if (validate && !err) {
-        return newFunc;
-      }	else {
-        return new Error(err);
+        const testResult = MathOps.MathProcessor({ code: mathOpsString, known: mathOpsKeys });
+        debug.info(testResult);
+        if (testResult.message) {
+          error = testResult.message;
+        }
+        else if (isNaN(testResult)) {
+          error = `The supplied math did not return a number: ${inputString}`;
+        }
       }
+      catch(e) { error = `Math failed validation - ${e}`; }
+      if (invalidProperties.length) new ChatDialog({ title: `Button Warning: "${buttonName}"`, content: `The following damage properties in the button are not set up in this game: ${invalidProperties.join(', ')}` }, 'error');
+
+      return error
+          ? { success: false, err: error }
+          : { success: true, err: null }
     }
     addButton(buttonData={}) {
-      debug.info(buttonData);
       const newButton = buttonData.default === false ? new CustomButton(buttonData) : new Button(buttonData);
-      if (newButton.err) return { success: 0, err: newButton.err }
+      debug.warn(newButton);
+      if (newButton.err || !newButton.math) return { success: 0, err: newButton.err || `Button ${buttonData.name} could not be created.` }
       if (this._buttons[newButton.name]) return { success: 0, err: `Button "${newButton.name}" already exists` };
       this._buttons[newButton.name] = newButton;
       this.saveToStore();
@@ -1834,11 +1965,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         if (buttonData[k] != null) {
           if (k === 'default') return; // Don't allow reassignment of 'default' property
           else if (k === 'math') {
-            const newMath = ButtonManager.parseMathString(buttonData[k]);
-            if (newMath.err) return newMath;
+            const { success, err } = ButtonManager.validateMathString(buttonData[k], buttonData.name);
+            if (!success) return { err };
             else {
               this._buttons[buttonData.name].mathString = buttonData[k];
-              this._buttons[buttonData.name].math = newMath;
               modded.push(k);
             }
           }
@@ -1846,9 +1976,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
             this._buttons[buttonData.name][k] = styles[buttonData[k]] || buttonData[k] || '';
             modded.push(k);
           }
-          // else if (k === 'query') {
-          //   this._buttons[buttonData.name].query = Button.splitAndEscapeQuery(buttonData.query);
-          //   modded.push(k);
+              // else if (k === 'query') {
+              //   this._buttons[buttonData.name].query = Button.splitAndEscapeQuery(buttonData.query);
+              //   modded.push(k);
           // }
           else {
             this._buttons[buttonData.name][k] = buttonData[k];
@@ -1869,8 +1999,8 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
     cloneButton(originalButtonName, newButtonName) {
       if (this._buttons[originalButtonName] && newButtonName) {
         const cloneName = /\s/.test(newButtonName) ? Helpers.camelise(newButtonName) : newButtonName,
-          cloneData = { ...this._buttons[originalButtonName], name: cloneName, default: false },
-          copyResult = this.addButton(cloneData);
+            cloneData = { ...this._buttons[originalButtonName], name: cloneName, default: false },
+            copyResult = this.addButton(cloneData);
         return copyResult.success ? { success: 1, msg: `Cloned button ${originalButtonName} => ${cloneName}` } : copyResult;
       }
       else return { err: `Could not find button "${originalButtonName}", or bad clone button name "${newButtonName}"` }
@@ -1879,7 +2009,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       if (!this._buttons[originalButtonName]) return { success: 0, err: `Button "${originalButtonName}" could not be found` };
       if (this._buttons[originalButtonName].default) return { success: 0, err: `Cannot rename a default button.` };
       const cloneName = /\s/.test(newButtonName) ? Helpers.camelise(newButtonName) : newButtonName,
-        cloneResult = this.cloneButton(originalButtonName, cloneName);
+          cloneResult = this.cloneButton(originalButtonName, cloneName);
       if (cloneResult.success) {
         this.removeButton(originalButtonName);
         return { success: 1, msg: `Renamed button ${originalButtonName} => ${cloneName}` };
@@ -1911,58 +2041,85 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       }
       const url = `https://raw.githubusercontent.com/ooshhub/autoButtons/main/assets/imageIcons/${buttonName}.png?${version}`.replace(/%/g, 'P');
       return cacheBust ?
-        `${url}${Math.floor(Math.random()*1000000000)}`
-        : url;
+          `${url}${Math.floor(Math.random()*1000000000)}`
+          : url;
       // May need to switch to this if images move
       // return styles.imageIcons[buttonName];
     }
     createApiButton(buttonName, damage, crit) {
+      // debug.info(this._buttons[buttonName]);
       const btn = this._buttons[buttonName],
-        autoHide = this._Config.getSetting(`autohide`),
-        bar = this._Config.getSetting('hpBar'),
-        overheal = this._Config.getSetting('overheal'),
-        overkill = this._Config.getSetting('overkill'),
-        sendReport = (this._Config.getSetting('report')||``).toLowerCase(),
-        reportString = [ 'all', 'gm', 'control' ].includes(sendReport)
-          ? ` --report ${sendReport}|${this._getReportTemplate(bar)}`
-          : ``,
-        darkMode = this._Config.getSetting('darkMode');
+          autoHide = this._Config.getSetting(`autohide`),
+          bar = this._Config.getSetting('hpBar'),
+          overheal = this._Config.getSetting('overheal'),
+          overkill = this._Config.getSetting('overkill'),
+          sendReport = (this._Config.getSetting('report')||``).toLowerCase(),
+          reportString = [ 'all', 'gm', 'control' ].includes(sendReport)
+              ? ` --report ${sendReport}|${this._getReportTemplate(bar)}`
+              : ``,
+          darkMode = this._Config.getSetting('darkMode');
       const zeroBound = this._Config.getSetting('allowNegatives') ? false : true,
-        boundingPre = zeroBound ? `{0, ` : ``,
-        boundingPost = zeroBound ? `}kh1` : ``;
+          boundingPre = zeroBound ? `{0, ` : ``,
+          boundingPost = zeroBound ? `}kh1` : ``;
       const queryString = Button.splitAndEscapeQuery(btn.query) || '';
       if (!btn || typeof(btn.math) !== 'function') {
         debug.error(`${scriptName}: error creating API button ${buttonName}`);
         return ``;
       }
-      const modifier = btn.math(damage, crit),
-        tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
-        setWithQuery = queryString ? `&lsqb;&lsqb;${boundingPre}${queryString.replace(/%%MODIFIER%%/g, Math.abs(modifier))}${boundingPost}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
-        tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
-        selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``,
-        buttonHref = `!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}`,
-        useImageIcon = this._Config.getSetting('imageIcons') && btn.default,
-        buttonContent = useImageIcon ? `<a href="${buttonHref}" style="${styles.buttonShared}"><img src="${this._getImageIcon(btn.name)}" style="${styles.imageIcon}"/></a>`
-          : `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style}">${btn.content}</a>`,
-        buttonContent2 = useImageIcon ? ``
-          : btn.content2 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style2}">${btn.content2}</a>` : ``,
-        buttonContent3 = useImageIcon ? ``
-          : btn.content3 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style3}">${btn.content3}</a>` : ``;
+      const modifier = this.resolveButtonMath(btn, damage, crit),
+          tooltip = btn.tooltip.replace(/%/, `${modifier} HP`),
+          setWithQuery = queryString ? `&lsqb;&lsqb;${boundingPre}${queryString.replace(/%%MODIFIER%%/g, Math.abs(modifier))}${boundingPost}&rsqb;&rsqb;` : `${Math.abs(modifier)}`,
+          tokenModCmd = (modifier > 0) ? (!overheal) ? `+${setWithQuery}!` : `+${setWithQuery}` : (modifier < 0 && !overkill) ? `-${setWithQuery}!` : `-${setWithQuery}`,
+          selectOrTarget = (this._Config.getSetting('targetTokens') === true) ? `--ids &commat;&lcub;target|token_id} ` : ``,
+          buttonHref = `!token-mod ${selectOrTarget}--set bar${bar}_value|${tokenModCmd}${reportString}`,
+          useImageIcon = this._Config.getSetting('imageIcons') && btn.default,
+          buttonContent = useImageIcon ? `<a href="${buttonHref}" style="${styles.buttonShared}"><img src="${this._getImageIcon(btn.name)}" style="${styles.imageIcon}"/></a>`
+              : `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style}">${btn.content}</a>`,
+          buttonContent2 = useImageIcon ? ``
+              : btn.content2 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style2}">${btn.content2}</a>` : ``,
+          buttonContent3 = useImageIcon ? ``
+              : btn.content3 ? `<a href="${buttonHref}" style="${styles.buttonShared}${btn.style3}">${btn.content3}</a>` : ``;
       return (autoHide && modifier == 0) ?
-        ``
-        : `<div class="button-container" style="${styles.buttonContainer}${Helpers.appendDarkMode('buttonContainer', darkMode)}"  title="${tooltip}">${buttonContent}${buttonContent2}${buttonContent3}</div>`;
+          ``
+          : `<div class="button-container" style="${styles.buttonContainer}${Helpers.appendDarkMode('buttonContainer', darkMode)}"  title="${tooltip}">${buttonContent}${buttonContent2}${buttonContent3}</div>`;
     }
     verifyButtons() {
       const currentSheet = this._Config.getSetting('sheet'),
-        currentButtons = this._Config.getSetting('enabledButtons'),
-        validButtons = currentButtons.filter(button => {
-        if (currentSheet === 'custom' || this._buttons[button] && this._buttons[button].sheets.includes(currentSheet)) return 1;
-      });
+          currentButtons = this._Config.getSetting('enabledButtons'),
+          validButtons = currentButtons.filter(button => {
+            if (currentSheet === 'custom' || this._buttons[button] && this._buttons[button].sheets.includes(currentSheet)) return 1;
+          });
       if (validButtons.length !== currentButtons.length) {
         const { success, msg, err } = this._Config.changeSetting('enabledButtons', validButtons);
         if (success && msg) new ChatDialog({ content: msg, title: 'Buttons Changed' });
         else if (err) new ChatDialog({ content: err }, 'error');
       }
+    }
+    resolveButtonMath(button, damage, crit) {
+      const buttonType = button.constructor.name;
+      if (buttonType === 'CustomButton') {
+        debug.info(button.mathString, MathOpsTransformer.transformMathOpsPayload(damage, crit), MathOpsTransformer.transformMathString(button.mathString));
+        let mathOpsString = MathOpsTransformer.transformMathString(button.mathString);
+        const mathOpsDamageKeys = MathOpsTransformer.transformMathOpsPayload(damage, crit);
+        // MathOps zeroed key patch
+        mathOpsString = mathOpsZeroPatch ? this.resolveZeroedKeys(mathOpsString, mathOpsDamageKeys) : mathOpsString;
+        debug.warn(mathOpsString);
+        let result = MathOps.MathProcessor({ code: mathOpsString, known:  mathOpsDamageKeys});
+        debug.info(result);
+        return isNaN(result) ? 0 : result;
+      }
+      else if (buttonType === 'Button') {
+        return button.math(damage, crit);
+      }
+    }
+    resolveZeroedKeys(mathOpsString, mathOpsDamageKeys) {
+      for (const key in mathOpsDamageKeys) {
+        if (mathOpsDamageKeys[key] === 0) {
+          const rxReplacer = new RegExp(key, 'g');
+          mathOpsString = mathOpsString.replace(rxReplacer, '0');
+        }
+      }
+      return mathOpsString;
     }
   }
 
@@ -1982,9 +2139,10 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         content2: buttonData.content2 || '',
         content3: buttonData.content3 || '',
         math: buttonData.math || null,
-        mathString: buttonData.mathString || buttonData.math.toString(),
+        mathString: buttonData.mathString,
         query: buttonData.query || ``,
         default: buttonData.default === false ? false : true,
+        mathBackup: buttonData.mathBackup || '',
       });
       debug.log(this);
       if (typeof(this.math) !== 'function') return { err: `Button "${this.name}" math function failed validation` };
@@ -1997,17 +2155,17 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         '+': `&plus;`,
       }
       const replacerFunction = (m) => replacers[m],
-        rxQuerySplit = /^[+*/-][+-0]?\|/,
-        rxReplacers = new RegExp(`[${Object.keys(replacers).reduce((out,v) => out += `\\${v}`, ``)}]`, 'g');
+          rxQuerySplit = /^[+*/-][+-0]?\|/,
+          rxReplacers = new RegExp(`[${Object.keys(replacers).reduce((out,v) => out += `\\${v}`, ``)}]`, 'g');
       let operator = (queryString.match(rxQuerySplit)||[])[0] || ``,
-        query = queryString.replace(rxQuerySplit, ''),
-        roundingPre = ``,
-        roundingPost = ``;
+          query = queryString.replace(rxQuerySplit, ''),
+          roundingPre = ``,
+          roundingPost = ``;
       // Deal with rounding for * and /
       if (/^[*/]/.test(operator)) {
         roundingPre = operator[1] === '+' ?
-          `ceil(`
-          : `floor(`
+            `ceil(`
+            : `floor(`
         roundingPost = `)`;
       }
       operator = (operator[0]||``).replace(rxReplacers, replacerFunction);
@@ -2020,15 +2178,20 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
    */
   class CustomButton extends Button {
     constructor(buttonData={}) {
-      debug.log(buttonData);
-      if (!buttonData.math && !buttonData.mathString) return { err: `Button must contain a function in 'math' key.` };
+      debug.info(buttonData);
+      if (!buttonData.mathString) return { err: `Button must contain a math string.` };
+      const { success, err } = ButtonManager.validateMathString(buttonData.mathString, buttonData.name);
+      if (!success) {
+        return { err };
+      }
       Object.assign(buttonData, {
         name: buttonData.name || 'newCustomButton',
-        mathString: buttonData.mathString || buttonData.math.toString(),
-        math: ButtonManager.parseMathString(buttonData.mathString || buttonData.math.toString()),
+        mathString: buttonData.mathString,
+        math: (code, known) => MathOps.MathProcessor({ code: MathOpsTransformer.transformMathString(code), known }),
         style: buttonData.style || 'full',
         query: buttonData.query || ``,
         default: false,
+        mathBackup: buttonData.mathBackup || buttonData.mathString,
       });
       super(buttonData);
     }
@@ -2065,9 +2228,9 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           if (data.requiredServices) {
             for (let service in data.requiredServices) {
               const svc =
-                service === 'ConfigController' ? this._services.config
-                : service === 'ButtonManager' ? this._services.buttons
-                : this._locator.getService(data.requiredServices[service]);
+                  service === 'ConfigController' ? this._services.config
+                      : service === 'ButtonManager' ? this._services.buttons
+                          : this._locator.getService(data.requiredServices[service]);
               if (svc) suppliedServices[service] = svc;
               else return debug.warn(`${this.name}: Warning - Service "${service}" could not be found for option ${data.name}. CLI option not registered.`);
             }
@@ -2082,7 +2245,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       let changed = [], errs = [];
       commandArray.forEach(command => {
         const cmd = (command.match(/^([^\s]+)/)||[])[1],
-          args = (command.match(/\s+(.+)/)||['',''])[1];
+            args = (command.match(/\s+(.+)/)||['',''])[1];
         for (let option in this._options) {
           if (this._options[option].rx.test(cmd)) {
             const { msg, err } = (this._options[option].action(args) || {});
@@ -2122,7 +2285,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         action: optionData.action
       });
     }
-    
+
   }
 
   /**
@@ -2135,7 +2298,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
       none: ({content}) => `${content}`,
       default: ({ title, content }) => {
         const msgArray = content ? Helpers.toArray(content) : [],
-          body = msgArray.map(row => `<div class="default-row" style="line-height: 1.5em;">${row}</div>`).join('')
+            body = msgArray.map(row => `<div class="default-row" style="line-height: 1.5em;">${row}</div>`).join('')
         return `
           <div class="default" style="${styles.list.container} background-color: #4d4d4d; border-color: #1e7917; text-align: center;">
             <div class="default-header" style="${styles.list.header}">${title||scriptName}</div>
@@ -2145,22 +2308,21 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
           </div>`;
       },
       table: ({ title, content, footer, borders }) => {
-        // debug.log(content);
         const rowBorders = borders && borders.row ? styles.table.rowBorders : ``;
         const msgArray = content ? Helpers.toArray(content) : [],
-          columns = msgArray[0].length || 1,
-          tableRows = msgArray.map((row,i) => {
-            const tc = i === 0 ? 'th' : 'td',
-              tcStyle = i === 0 ? styles.table.headerCell : `${styles.table.cell}${rowBorders}`,
-              trStyle = i === 0 ? styles.table.headerRow : styles.table.row;
-            let cells = ``;
-            for (let i=0; i < columns; i++) { cells += `<${tc} style="${tcStyle}">${row[i]}</${tc}>` }
-            return `
+            columns = msgArray[0].length || 1,
+            tableRows = msgArray.map((row,i) => {
+              const tc = i === 0 ? 'th' : 'td',
+                  tcStyle = i === 0 ? styles.table.headerCell : `${styles.table.cell}${rowBorders}`,
+                  trStyle = i === 0 ? styles.table.headerRow : styles.table.row;
+              let cells = ``;
+              for (let i=0; i < columns; i++) { cells += `<${tc} style="${tcStyle}">${row[i]}</${tc}>` }
+              return `
               <tr style="${trStyle}">
                 ${cells}
               </tr>`;
-          }).join(''),
-          footerContent = footer ? `<div class="table-footer" style="${styles.table.footer}">${footer}</div>` : ``;
+            }).join(''),
+            footerContent = footer ? `<div class="table-footer" style="${styles.table.footer}">${footer}</div>` : ``;
         return `
         <div class="table" style="${styles.list.container} background-color: #4d4d4d; border-color: #1e7917; text-align: center;">
           <div class="table-header" style="${styles.list.header}">${title||scriptName}</div>
@@ -2195,7 +2357,7 @@ const autoButtons = (() => { // eslint-disable-line no-unused-vars
         `;
       }
     }
-    
+
     constructor(message, template = 'default', autoSend = true) {
       this.msg = ChatDialog._templates[template] ? ChatDialog._templates[template](message) : null;
       if (this.msg) {

@@ -2,5 +2,6 @@ test*.*
 .eslint*.*
 /dev/refactor*
 *.txt
-/node_modules
-/.vscode
+node_modules
+.vscode
+.idea
